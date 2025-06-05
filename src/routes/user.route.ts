@@ -1,11 +1,41 @@
 import { Router } from 'express';
-import { createUser, getUsers } from '../controllers/user.controller';
-import { createUserSchema } from '../types/user';
-import { validate } from '../middlewares/validate';
+import {
+    getProfile,
+    updateProfile,
+    deleteAccount,
+    changePassword,
+    getAddresses,
+    createAddress,
+    updateAddress,
+    deleteAddress,
+    setDefaultAddress
+} from '../controllers/user.controller';
+import { validateRequest } from '../middleware/validate';
+import { authenticate, authorize } from '../middleware/auth';
+import {
+    updateProfileSchema,
+    changePasswordSchema,
+    createAddressSchema,
+    updateAddressSchema
+} from '../validators/user.validator';
+import { Role } from '@prisma/client';
 
 const router = Router();
 
-router.post('/', validate(createUserSchema), createUser);
-router.get('/', getUsers);
+// All routes require authentication
+router.use(authenticate);
+
+// Profile routes
+router.get('/profile', getProfile);
+router.put('/profile', validateRequest(updateProfileSchema), updateProfile);
+router.delete('/account', deleteAccount);
+router.post('/change-password', validateRequest(changePasswordSchema), changePassword);
+
+// Address routes
+router.get('/addresses', getAddresses);
+router.post('/addresses', validateRequest(createAddressSchema), createAddress);
+router.put('/addresses/:id', validateRequest(updateAddressSchema), updateAddress);
+router.delete('/addresses/:id', deleteAddress);
+router.put('/addresses/:id/default', setDefaultAddress);
 
 export default router;
