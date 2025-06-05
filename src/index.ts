@@ -4,6 +4,7 @@ import userRoutes from './routes/user.route';
 import { prisma } from './config/db';
 import redis from './config/redis';
 import dotenv from 'dotenv';
+import authRoutes from './routes/auth.route';
 
 dotenv.config();
 const app = express();
@@ -17,7 +18,10 @@ app.get('/', (req: Request, res: Response) => {
     res.send('Hello kulangara');
 });
 
+
+app.use('/api/v1/auth', authRoutes);
 app.use('/api/v1/users', userRoutes);
+
 
 
 app.listen(port, async () => {
