@@ -1,0 +1,62 @@
+import { Router } from 'express';
+import {
+    listProducts,
+    getFeaturedProducts,
+    searchProducts,
+    getProductById,
+    getProductBySlug,
+    createProduct,
+    updateProduct,
+    deleteProduct,
+    uploadProductImages,
+    deleteProductImage,
+    getProductReviews,
+    createProductReview,
+    updateProductReview,
+    deleteProductReview,
+    getProductImageUploadUrls
+} from '../controllers/product.controller';
+import { validateRequest } from '../middleware/validate';
+import { authenticate, authorize } from '../middleware/auth';
+import {
+    createProductSchema,
+    updateProductSchema,
+    createReviewSchema,
+    updateReviewSchema
+} from '../validators/product.validator';
+import { Role } from '@prisma/client';
+
+const router = Router();
+
+// Public routes - specific endpoints first
+router.get('/list', listProducts);
+router.get('/featured', getFeaturedProducts);
+router.get('/search', searchProducts);
+router.get('/slug/:slug', getProductBySlug);
+router.get('/:id/reviews', getProductReviews);
+
+// Protected routes
+router.use(authenticate);
+
+// Review routes (requires authentication)
+router.post('/:id/reviews', validateRequest(createReviewSchema), createProductReview);
+router.put('/:id/reviews/:reviewId', validateRequest(updateReviewSchema), updateProductReview);
+router.delete('/:id/reviews/:reviewId', deleteProductReview);
+
+
+// Admin only routes
+router.post('/', authorize(Role.ADMIN), validateRequest(createProductSchema), createProduct);
+router.put('/:id', authorize(Role.ADMIN), validateRequest(updateProductSchema), updateProduct);
+
+// Image upload routes
+router.post('/:id/images/upload-urls', authorize(Role.ADMIN), getProductImageUploadUrls);
+router.post('/:id/images', authorize(Role.ADMIN), uploadProductImages);
+router.delete('/:id/images/:imageId', authorize(Role.ADMIN), deleteProductImage);
+
+// Super Admin only routes
+router.delete('/:id', authorize(Role.SUPER_ADMIN), deleteProduct);
+
+// Generic ID route should come last
+router.get('/:id', getProductById);
+
+export default router;
