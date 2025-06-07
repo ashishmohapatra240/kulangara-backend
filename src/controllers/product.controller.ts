@@ -17,7 +17,11 @@ import {
     IProductImageUploadUrl,
     IReview,
     IReviewUpdate,
-    IReviewFilters
+    IReviewFilters,
+    IProductVariant,
+    IProductVariantCreate,
+    IProductVariantUpdate,
+    IProductVariantBulkCreate
 } from '../types/product.types';
 
 // Cache keys
@@ -577,6 +581,204 @@ export const deleteProductImage = async (req: Request, res: Response): Promise<v
         res.status(500).json({
             status: 'error',
             message: 'Failed to delete product image'
+        });
+    }
+};
+
+// Create product variant
+export const createProductVariant = async (
+    req: Request<{ id: string }, {}, IProductVariantCreate>,
+    res: Response
+): Promise<void> => {
+    try {
+        const { id } = req.params;
+
+        // Check if product exists
+        const product = await prisma.product.findUnique({
+            where: { id }
+        });
+
+        if (!product) {
+            res.status(404).json({
+                status: 'error',
+                message: 'Product not found'
+            });
+            return;
+        }
+
+        const variant = await prisma.productVariant.create({
+            data: {
+                ...req.body,
+                productId: id
+            }
+        });
+
+        // Invalidate product cache
+        await deleteCache(CACHE_KEYS.PRODUCT_DETAILS(id));
+
+        res.status(201).json({
+            status: 'success',
+            message: 'Product variant created successfully',
+            data: { variant }
+        });
+    } catch (error) {
+        console.error('Error in createProductVariant:', error);
+        if (error instanceof Prisma.PrismaClientKnownRequestError) {
+            if (error.code === 'P2002') {
+                res.status(400).json({
+                    status: 'error',
+                    message: 'A variant with this SKU already exists'
+                });
+                return;
+            }
+        }
+        res.status(500).json({
+            status: 'error',
+            message: 'Failed to create product variant'
+        });
+    }
+};
+
+// Create multiple product variants
+export const createProductVariants = async (
+    req: Request<{ id: string }, {}, IProductVariantBulkCreate>,
+    res: Response
+): Promise<void> => {
+    try {
+        const { id } = req.params;
+        const { variants } = req.body;
+
+        // Check if product exists
+        const product = await prisma.product.findUnique({
+            where: { id }
+        });
+
+        if (!product) {
+            res.status(404).json({
+                status: 'error',
+                message: 'Product not found'
+            });
+            return;
+        }
+
+        const createdVariants = await prisma.productVariant.createMany({
+            data: variants.map(variant => ({
+                ...variant,
+                productId: id
+            }))
+        });
+
+        // Invalidate product cache
+        await deleteCache(CACHE_KEYS.PRODUCT_DETAILS(id));
+
+        res.status(201).json({
+            status: 'success',
+            message: 'Product variants created successfully',
+            data: { count: createdVariants.count }
+        });
+    } catch (error) {
+        console.error('Error in createProductVariants:', error);
+        if (error instanceof Prisma.PrismaClientKnownRequestError) {
+            if (error.code === 'P2002') {
+                res.status(400).json({
+                    status: 'error',
+                    message: 'One or more variants have duplicate SKUs'
+                });
+                return;
+            }
+        }
+        res.status(500).json({
+            status: 'error',
+            message: 'Failed to create product variants'
+        });
+    }
+};
+
+// Update product variant
+export const updateProductVariant = async (
+    req: Request<{ id: string; variantId: string }, {}, IProductVariantUpdate>,
+    res: Response
+): Promise<void> => {
+    try {
+        const { id, variantId } = req.params;
+
+        const variant = await prisma.productVariant.update({
+            where: {
+                id: variantId,
+                productId: id
+            },
+            data: req.body
+        });
+
+        // Invalidate product cache
+        await deleteCache(CACHE_KEYS.PRODUCT_DETAILS(id));
+
+        res.json({
+            status: 'success',
+            message: 'Product variant updated successfully',
+            data: { variant }
+        });
+    } catch (error) {
+        console.error('Error in updateProductVariant:', error);
+        if (error instanceof Prisma.PrismaClientKnownRequestError) {
+            if (error.code === 'P2002') {
+                res.status(400).json({
+                    status: 'error',
+                    message: 'A variant with this SKU already exists'
+                });
+                return;
+            }
+            if (error.code === 'P2025') {
+                res.status(404).json({
+                    status: 'error',
+                    message: 'Variant not found'
+                });
+                return;
+            }
+        }
+        res.status(500).json({
+            status: 'error',
+            message: 'Failed to update product variant'
+        });
+    }
+};
+
+// Delete product variant
+export const deleteProductVariant = async (
+    req: Request<{ id: string; variantId: string }>,
+    res: Response
+): Promise<void> => {
+    try {
+        const { id, variantId } = req.params;
+
+        await prisma.productVariant.delete({
+            where: {
+                id: variantId,
+                productId: id
+            }
+        });
+
+        // Invalidate product cache
+        await deleteCache(CACHE_KEYS.PRODUCT_DETAILS(id));
+
+        res.json({
+            status: 'success',
+            message: 'Product variant deleted successfully'
+        });
+    } catch (error) {
+        console.error('Error in deleteProductVariant:', error);
+        if (error instanceof Prisma.PrismaClientKnownRequestError) {
+            if (error.code === 'P2025') {
+                res.status(404).json({
+                    status: 'error',
+                    message: 'Variant not found'
+                });
+                return;
+            }
+        }
+        res.status(500).json({
+            status: 'error',
+            message: 'Failed to delete product variant'
         });
     }
 };

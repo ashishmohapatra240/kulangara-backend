@@ -56,10 +56,28 @@ export interface IProductVariant {
     id: string;
     productId: string;
     size: string;
-    color: string;
+    color?: string;
+    price?: number;
+    sku: string;
     stock: number;
+    isActive: boolean;
     createdAt: Date;
     updatedAt: Date;
+}
+
+export interface IProductVariantCreate {
+    size: string;
+    color?: string;
+    price?: number;
+    sku: string;
+    stock: number;
+    isActive?: boolean;
+}
+
+export interface IProductVariantUpdate extends Partial<IProductVariantCreate> {}
+
+export interface IProductVariantBulkCreate {
+    variants: IProductVariantCreate[];
 }
 
 export interface IProductReview {
