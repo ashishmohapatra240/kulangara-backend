@@ -7,6 +7,7 @@ import dotenv from 'dotenv';
 import authRoutes from './routes/auth.route';
 import productRoutes from './routes/product.route';
 import categoryRoutes from './routes/category.route';
+import couponRoutes from './routes/coupon.route';
 import cors from 'cors';
 import helmet from 'helmet';
 import morgan from 'morgan';
@@ -30,6 +31,7 @@ app.use('/api/v1/auth', authRoutes);
 app.use('/api/v1/users', userRoutes);
 app.use('/api/v1/products', productRoutes);
 app.use('/api/v1/categories', categoryRoutes);
+app.use('/api/v1/coupons', couponRoutes);
 
 // Handle 404
 app.use(notFoundHandler);

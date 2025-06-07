@@ -99,15 +99,117 @@ model Address {
   @@map("addresses")
 }
 
+model Coupon {
+  id          String  @id @default(auto()) @map("_id") @db.ObjectId
+  code        String  @unique
+  name        String
+  description String?
+
+  // Discount
+  type          DiscountType
+  value         Float // Percentage or fixed amount
+  maxDiscount   Float? // Max discount for percentage type
+  minOrderValue Float? // Minimum order value
+
+  // Usage
+  usageLimit     Int? // Total usage limit
+  usageCount     Int  @default(0)
+  userUsageLimit Int? // Per user usage limit
+
+  // Validity
+  validFrom  DateTime
+  validUntil DateTime
+  isActive   Boolean  @default(true)
+
+  // Relations
+  orders Order[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("coupons")
+}
+
+enum DiscountType {
+  PERCENTAGE
+  FIXED_AMOUNT
+  FREE_SHIPPING
+}
+
 model Order {
-  id        String      @id @default(auto()) @map("_id") @db.ObjectId
-  userId    String      @db.ObjectId
-  user      User        @relation(fields: [userId], references: [id])
-  addressId String      @db.ObjectId
-  address   Address     @relation(fields: [addressId], references: [id])
-  OrderItem OrderItem[]
+  id          String @id @default(auto()) @map("_id") @db.ObjectId
+  orderNumber String @unique
+  userId      String @db.ObjectId
+  user        User   @relation(fields: [userId], references: [id])
+
+  // Status
+  status        OrderStatus   @default(PENDING)
+  paymentStatus PaymentStatus @default(PENDING)
+
+  // Pricing
+  subtotal       Float
+  shippingFee    Float @default(0)
+  taxAmount      Float @default(0)
+  discountAmount Float @default(0)
+  totalAmount    Float
+
+  // Address
+  shippingAddressId String  @db.ObjectId
+  shippingAddress   Address @relation(fields: [shippingAddressId], references: [id])
+
+  // Payment
+  paymentMethod String
+  paymentId     String?
+
+  // Delivery
+  trackingNumber    String?
+  estimatedDelivery DateTime?
+  deliveredAt       DateTime?
+
+  // Relations
+  items         OrderItem[]
+  statusHistory OrderStatusHistory[]
+  coupon        Coupon?              @relation(fields: [couponId], references: [id])
+  couponId      String?              @db.ObjectId
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@map("orders")
+}
+
+enum OrderStatus {
+  PENDING
+  CONFIRMED
+  PROCESSING
+  SHIPPED
+  OUT_FOR_DELIVERY
+  DELIVERED
+  CANCELLED
+  RETURNED
+  REFUNDED
+}
+
+enum PaymentStatus {
+  PENDING
+  PAID
+  FAILED
+  REFUNDED
+  PARTIAL_REFUND
+}
+
+model OrderStatusHistory {
+  id      String @id @default(auto()) @map("_id") @db.ObjectId
+  orderId String @db.ObjectId
+  order   Order  @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  status    OrderStatus
+  note      String?
+  updatedBy String? // User ID who updated
+
+  createdAt DateTime @default(now())
+
+  @@map("order_status_history")
 }
 
 model Review {
