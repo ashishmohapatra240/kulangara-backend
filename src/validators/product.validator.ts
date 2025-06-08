@@ -54,6 +54,43 @@ export const updateProductSchema = z.object({
     })
 });
 
+export const createVariantSchema = z.object({
+    body: z.object({
+        size: z.string().min(1).max(20),
+        color: z.string().min(1).max(50).optional(),
+        price: z.number().positive().optional(),
+        sku: z.string().min(3).max(50),
+        stock: z.number().int().min(0),
+        isActive: z.boolean().optional()
+    })
+});
+
+export const updateVariantSchema = z.object({
+    body: z.object({
+        size: z.string().min(1).max(20).optional(),
+        color: z.string().min(1).max(50).optional(),
+        price: z.number().positive().optional(),
+        sku: z.string().min(3).max(50).optional(),
+        stock: z.number().int().min(0).optional(),
+        isActive: z.boolean().optional()
+    })
+});
+
+export const createVariantBulkSchema = z.object({
+    body: z.object({
+        variants: z.array(
+            z.object({
+                size: z.string().min(1).max(20),
+                color: z.string().min(1).max(50).optional(),
+                price: z.number().positive().optional(),
+                sku: z.string().min(3).max(50),
+                stock: z.number().int().min(0),
+                isActive: z.boolean().optional()
+            })
+        ).min(1)
+    })
+});
+
 export const createReviewSchema = z.object({
     body: z.object({
         rating: z.number().int().min(1).max(5),

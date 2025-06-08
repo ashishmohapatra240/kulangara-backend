@@ -233,22 +233,51 @@ model Review {
 }
 
 model Wishlist {
-  id        String   @id @default(auto()) @map("_id") @db.ObjectId
-  userId    String   @db.ObjectId
-  user      User     @relation(fields: [userId], references: [id])
-  Product   Product? @relation(fields: [productId], references: [id])
-  productId String?  @db.ObjectId
+  id        String  @id @default(auto()) @map("_id") @db.ObjectId
+  userId    String  @db.ObjectId
+  user      User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  productId String  @db.ObjectId
+  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
 
+  createdAt DateTime @default(now())
+
+  @@unique([userId, productId])
   @@map("wishlists")
 }
 
 model Cart {
-  id       String     @id @default(auto()) @map("_id") @db.ObjectId
-  userId   String     @unique @db.ObjectId
-  user     User       @relation(fields: [userId], references: [id])
-  CartItem CartItem[]
+  id     String @id @default(auto()) @map("_id") @db.ObjectId
+  userId String @unique @db.ObjectId
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  items CartItem[]
+
+  subtotal Float @default(0)
+  total    Float @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@map("carts")
+}
+
+model CartItem {
+  id        String          @id @default(auto()) @map("_id") @db.ObjectId
+  cartId    String          @db.ObjectId
+  cart      Cart            @relation(fields: [cartId], references: [id], onDelete: Cascade)
+  productId String          @db.ObjectId
+  product   Product         @relation(fields: [productId], references: [id], onDelete: Cascade)
+  variantId String?         @db.ObjectId
+  variant   ProductVariant? @relation(fields: [variantId], references: [id], onDelete: Cascade)
+
+  quantity Int
+  price    Float // Price at time of adding to cart
+  subtotal Float // price * quantity
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("cart_items")
 }
 
 model Category {
@@ -377,22 +406,4 @@ model OrderItem {
   createdAt DateTime @default(now())
 
   @@map("order_items")
-}
-
-model CartItem {
-  id        String          @id @default(auto()) @map("_id") @db.ObjectId
-  cartId    String          @db.ObjectId
-  cart      Cart            @relation(fields: [cartId], references: [id], onDelete: Cascade)
-  productId String          @db.ObjectId
-  product   Product         @relation(fields: [productId], references: [id], onDelete: Cascade)
-  variantId String?         @db.ObjectId
-  variant   ProductVariant? @relation(fields: [variantId], references: [id], onDelete: Cascade)
-
-  quantity Int
-  price    Float // Price at time of adding to cart
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  @@map("cart_items")
 }

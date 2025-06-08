@@ -8,6 +8,8 @@ import authRoutes from './routes/auth.route';
 import productRoutes from './routes/product.route';
 import categoryRoutes from './routes/category.route';
 import couponRoutes from './routes/coupon.route';
+import cartRoutes from './routes/cart.route';
+import wishlistRoutes from './routes/wishlist.route';
 import cors from 'cors';
 import helmet from 'helmet';
 import morgan from 'morgan';
@@ -32,6 +34,8 @@ app.use('/api/v1/users', userRoutes);
 app.use('/api/v1/products', productRoutes);
 app.use('/api/v1/categories', categoryRoutes);
 app.use('/api/v1/coupons', couponRoutes);
+app.use('/api/v1/cart', cartRoutes);
+app.use('/api/v1/wishlist', wishlistRoutes);
 
 // Handle 404
 app.use(notFoundHandler);

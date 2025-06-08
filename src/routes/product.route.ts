@@ -14,7 +14,11 @@ import {
     createProductReview,
     updateProductReview,
     deleteProductReview,
-    getProductImageUploadUrls
+    getProductImageUploadUrls,
+    createProductVariant,
+    createProductVariants,
+    updateProductVariant,
+    deleteProductVariant
 } from '../controllers/product.controller';
 import { validateRequest } from '../middleware/validate';
 import { authenticate, authorize } from '../middleware/auth';
@@ -22,7 +26,10 @@ import {
     createProductSchema,
     updateProductSchema,
     createReviewSchema,
-    updateReviewSchema
+    updateReviewSchema,
+    createVariantSchema,
+    updateVariantSchema,
+    createVariantBulkSchema
 } from '../validators/product.validator';
 import { Role } from '@prisma/client';
 
@@ -52,6 +59,12 @@ router.put('/:id', authorize(Role.ADMIN), validateRequest(updateProductSchema), 
 router.post('/:id/images/upload-urls', authorize(Role.ADMIN), getProductImageUploadUrls);
 router.post('/:id/images', authorize(Role.ADMIN), uploadProductImages);
 router.delete('/:id/images/:imageId', authorize(Role.ADMIN), deleteProductImage);
+
+// Variant routes (admin only)
+router.post('/:id/variants', authorize(Role.ADMIN), validateRequest(createVariantSchema), createProductVariant);
+router.post('/:id/variants/bulk', authorize(Role.ADMIN), validateRequest(createVariantBulkSchema), createProductVariants);
+router.put('/:id/variants/:variantId', authorize(Role.ADMIN), validateRequest(updateVariantSchema), updateProductVariant);
+router.delete('/:id/variants/:variantId', authorize(Role.ADMIN), deleteProductVariant);
 
 // Super Admin only routes
 router.delete('/:id', authorize(Role.SUPER_ADMIN), deleteProduct);
