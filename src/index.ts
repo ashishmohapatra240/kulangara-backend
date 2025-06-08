@@ -1,15 +1,9 @@
 import express from 'express';
 import { Request, Response } from 'express';
-import userRoutes from './routes/user.route';
 import { prisma } from './config/db';
 import redis from './config/redis';
 import dotenv from 'dotenv';
-import authRoutes from './routes/auth.route';
-import productRoutes from './routes/product.route';
-import categoryRoutes from './routes/category.route';
-import couponRoutes from './routes/coupon.route';
-import cartRoutes from './routes/cart.route';
-import wishlistRoutes from './routes/wishlist.route';
+import indexRoutes from './routes';
 import cors from 'cors';
 import helmet from 'helmet';
 import morgan from 'morgan';
@@ -29,13 +23,7 @@ app.get('/', (req: Request, res: Response) => {
     res.send('Hello kulangara');
 });
 
-app.use('/api/v1/auth', authRoutes);
-app.use('/api/v1/users', userRoutes);
-app.use('/api/v1/products', productRoutes);
-app.use('/api/v1/categories', categoryRoutes);
-app.use('/api/v1/coupons', couponRoutes);
-app.use('/api/v1/cart', cartRoutes);
-app.use('/api/v1/wishlist', wishlistRoutes);
+app.use('/api/v1', indexRoutes);
 
 // Handle 404
 app.use(notFoundHandler);

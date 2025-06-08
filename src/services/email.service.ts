@@ -2,6 +2,7 @@ import { renderAsync } from '@react-email/render';
 import { resend } from '../config/resend';
 import { VerificationEmail } from '../emails/VerificationEmail';
 import { ResetPasswordEmail } from '../emails/ResetPasswordEmail';
+import { AdminEmail } from '../emails/AdminEmail';
 
 const FROM_EMAIL = process.env.FROM_EMAIL || 'onboarding@resend.dev';
 const APP_URL = process.env.APP_URL || 'http://localhost:3000';
@@ -40,4 +41,42 @@ export const sendPasswordResetEmail = async (
         subject: 'Reset your password',
         html,
     });
-}; 
+};
+
+export interface AdminEmailOptions {
+    to: string[];
+    subject: string;
+    content: string;
+    buttonText?: string;
+    buttonUrl?: string;
+    footerText?: string;
+    previewText?: string;
+}
+
+export const sendAdminEmail = async ({
+    to,
+    subject,
+    content,
+    buttonText,
+    buttonUrl,
+    footerText,
+    previewText
+}: AdminEmailOptions) => {
+    const html = await renderAsync(
+        AdminEmail({
+            subject,
+            content,
+            buttonText,
+            buttonUrl,
+            footerText,
+            previewText
+        })
+    );
+
+    return resend.emails.send({
+        from: FROM_EMAIL,
+        to,
+        subject,
+        html,
+    });
+};
