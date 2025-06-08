@@ -55,15 +55,7 @@ const recalculateCartTotals = async (cartId: string) => {
 // Get cart
 export const getCart = async (req: Request, res: Response): Promise<void> => {
     try {
-        const userId = req.user?.id;
-
-        if (!userId) {
-            res.status(401).json({
-                status: 'error',
-                message: 'Unauthorized'
-            });
-            return;
-        }
+        const userId = req.user!.id;
 
         const cacheKey = CACHE_KEYS.CART(userId);
 
@@ -117,16 +109,8 @@ export const getCart = async (req: Request, res: Response): Promise<void> => {
 // Add item to cart
 export const addCartItem = async (req: Request<{}, {}, ICartItemCreate>, res: Response): Promise<void> => {
     try {
-        const userId = req.user?.id;
+        const userId = req.user!.id;
         const { productId, variantId, quantity } = req.body;
-
-        if (!userId) {
-            res.status(401).json({
-                status: 'error',
-                message: 'Unauthorized'
-            });
-            return;
-        }
 
         if (!isValidObjectId(productId)) {
             res.status(400).json({
@@ -267,17 +251,9 @@ export const updateCartItem = async (
     res: Response
 ): Promise<void> => {
     try {
-        const userId = req.user?.id;
+        const userId = req.user!.id;
         const { id } = req.params;
         const { quantity } = req.body;
-
-        if (!userId) {
-            res.status(401).json({
-                status: 'error',
-                message: 'Unauthorized'
-            });
-            return;
-        }
 
         if (!isValidObjectId(id)) {
             res.status(400).json({
@@ -357,16 +333,8 @@ export const removeCartItem = async (
     res: Response
 ): Promise<void> => {
     try {
-        const userId = req.user?.id;
+        const userId = req.user!.id;
         const { id } = req.params;
-
-        if (!userId) {
-            res.status(401).json({
-                status: 'error',
-                message: 'Unauthorized'
-            });
-            return;
-        }
 
         if (!isValidObjectId(id)) {
             res.status(400).json({
@@ -439,15 +407,7 @@ export const removeCartItem = async (
 // Clear cart
 export const clearCart = async (req: Request, res: Response): Promise<void> => {
     try {
-        const userId = req.user?.id;
-
-        if (!userId) {
-            res.status(401).json({
-                status: 'error',
-                message: 'Unauthorized'
-            });
-            return;
-        }
+        const userId = req.user!.id;
 
         const updatedCart = await prisma.$transaction(async (prismaClient) => {
             // Delete all cart items
