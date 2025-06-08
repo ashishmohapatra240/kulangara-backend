@@ -407,3 +407,18 @@ model OrderItem {
 
   @@map("order_items")
 }
+
+model Analytics {
+  id         String   @id @default(auto()) @map("_id") @db.ObjectId
+  type       String   // page_view, product_view, purchase, etc.
+  event      String
+  data       Json     // Additional event data
+  userId     String?  @db.ObjectId
+  sessionId  String?
+  ip         String?
+  userAgent  String?
+  
+  createdAt  DateTime @default(now())
+  
+  @@map("analytics")
+}
