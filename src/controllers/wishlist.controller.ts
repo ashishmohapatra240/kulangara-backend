@@ -21,14 +21,7 @@ const isValidObjectId = (id: string): boolean => {
 // Get wishlist
 export const getWishlist = async (req: Request, res: Response): Promise<void> => {
     try {
-        const userId = req.user?.id;
-        if (!userId) {
-            res.status(401).json({
-                status: 'error',
-                message: 'Unauthorized'
-            });
-            return;
-        }
+        const userId = req.user!.id;
 
         const cacheKey = CACHE_KEYS.WISHLIST(userId);
 
@@ -88,14 +81,7 @@ export const addToWishlist = async (
     res: Response
 ): Promise<void> => {
     try {
-        const userId = req.user?.id;
-        if (!userId) {
-            res.status(401).json({
-                status: 'error',
-                message: 'Unauthorized'
-            });
-            return;
-        }
+        const userId = req.user!.id;
 
         const { productId } = req.body;
 
@@ -185,14 +171,7 @@ export const removeFromWishlist = async (
     res: Response
 ): Promise<void> => {
     try {
-        const userId = req.user?.id;
-        if (!userId) {
-            res.status(401).json({
-                status: 'error',
-                message: 'Unauthorized'
-            });
-            return;
-        }
+        const userId = req.user!.id;
 
         const { id: productId } = req.params;
 
