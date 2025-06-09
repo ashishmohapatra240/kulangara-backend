@@ -1,15 +1,16 @@
+import dotenv from 'dotenv';
+dotenv.config();
+
 import express from 'express';
 import { Request, Response } from 'express';
 import { prisma } from './config/db';
 import redis from './config/redis';
-import dotenv from 'dotenv';
 import indexRoutes from './routes';
 import cors from 'cors';
 import helmet from 'helmet';
 import morgan from 'morgan';
 import { errorHandler, notFoundHandler } from './middleware/error';
 
-dotenv.config();
 const app = express();
 const port = process.env.PORT || 3000;
 
