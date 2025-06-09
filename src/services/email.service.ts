@@ -1,4 +1,4 @@
-import { renderAsync } from '@react-email/render';
+import { render } from '@react-email/render';
 import { resend } from '../config/resend';
 import { VerificationEmail } from '../emails/VerificationEmail';
 import { ResetPasswordEmail } from '../emails/ResetPasswordEmail';
@@ -13,7 +13,7 @@ export const sendVerificationEmail = async (
     token: string
 ) => {
     const verificationUrl = `${APP_URL}/verify-email/${token}`;
-    const html = await renderAsync(
+    const html = await render(
         VerificationEmail({ firstName, verificationUrl })
     );
 
@@ -31,7 +31,7 @@ export const sendPasswordResetEmail = async (
     token: string
 ) => {
     const resetUrl = `${APP_URL}/reset-password/${token}`;
-    const html = await renderAsync(
+    const html = await render(
         ResetPasswordEmail({ firstName, resetUrl })
     );
 
@@ -62,7 +62,7 @@ export const sendAdminEmail = async ({
     footerText,
     previewText
 }: AdminEmailOptions) => {
-    const html = await renderAsync(
+    const html = await render(
         AdminEmail({
             subject,
             content,
