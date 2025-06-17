@@ -176,8 +176,10 @@ export const login = async (req: Request, res: Response): Promise<void> => {
 
         res.cookie("refreshToken", tokens.refreshToken, {
             httpOnly: true,
-            secure: isProd,
-            sameSite: isProd ? 'strict' : 'lax',
+            // secure: isProd,
+            // sameSite: isProd ? 'strict' : 'lax',
+            secure: false,
+            sameSite: 'none',
             maxAge: 7 * 24 * 60 * 60 * 1000,
         })
 
@@ -250,8 +252,10 @@ export const refreshToken = async (req: Request, res: Response): Promise<void> =
         res.cookie("accessToken", tokens.accessToken, {
 
             httpOnly: true,
-            secure: isProd,
-            sameSite: isProd ? 'strict' : 'lax',
+            // secure: isProd,
+            // sameSite: isProd ? 'strict' : 'lax',
+            secure: false,
+            sameSite: 'none',
             maxAge: 15 * 60 * 1000,
         });
 
