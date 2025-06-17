@@ -78,6 +78,21 @@ export const register = async (req: Request, res: Response): Promise<void> => {
         // Send verification email
         await sendVerificationEmail(user.email, user.firstName, verificationToken);
 
+        res.cookie("accessToken", tokens.accessToken, {
+
+            httpOnly: true,
+            secure: true,
+            sameSite: "strict",
+            maxAge: 15 * 60 * 1000,
+        });
+
+        res.cookie("refreshToken", tokens.refreshToken, {
+            httpOnly: true,
+            secure: true,
+            sameSite: "strict",
+            maxAge: 7 * 24 * 60 * 60 * 1000,
+        });
+
         res.status(201).json({
             status: 'success',
             message: 'Registration successful',
@@ -88,7 +103,6 @@ export const register = async (req: Request, res: Response): Promise<void> => {
                     firstName: user.firstName,
                     lastName: user.lastName,
                 },
-                tokens,
             },
         });
     } catch (error) {
@@ -145,6 +159,20 @@ export const login = async (req: Request, res: Response): Promise<void> => {
             data: { lastLoginAt: new Date() },
         });
 
+        res.cookie("accessToken", tokens.accessToken, {
+            httpOnly: true,
+            secure: true,
+            sameSite: "strict",
+            maxAge: 15 * 60 * 1000,
+        });
+
+        res.cookie("refreshToken", tokens.refreshToken, {
+            httpOnly: true,
+            secure: true,
+            sameSite: "strict",
+            maxAge: 7 * 24 * 60 * 60 * 1000,
+        })
+
         res.json({
             status: 'success',
             message: 'Login successful',
@@ -157,7 +185,6 @@ export const login = async (req: Request, res: Response): Promise<void> => {
                     role: user.role,
                     isVerified: user.isVerified,
                 },
-                tokens,
             },
         });
     } catch (error) {
@@ -171,7 +198,7 @@ export const login = async (req: Request, res: Response): Promise<void> => {
 
 export const refreshToken = async (req: Request, res: Response): Promise<void> => {
     try {
-        const { refreshToken } = req.body;
+        const refreshToken = req.cookies.refreshToken;
 
         // Verify token exists and is valid
         const tokenRecord = await prisma.refreshToken.findUnique({
@@ -204,10 +231,24 @@ export const refreshToken = async (req: Request, res: Response): Promise<void> =
             },
         });
 
+        res.cookie("accessToken", tokens.accessToken, {
+
+            httpOnly: true,
+            secure: true,
+            sameSite: "strict",
+            maxAge: 15 * 60 * 1000,
+        });
+
+        res.cookie("refreshToken", tokens.refreshToken, {
+            httpOnly: true,
+            secure: true,
+            sameSite: "strict",
+            maxAge: 7 * 24 * 60 * 60 * 1000,
+        })
+
         res.json({
             status: 'success',
             message: 'Token refreshed successfully',
-            data: { tokens },
         });
     } catch (error) {
         console.error('Token refresh error:', error);
@@ -220,7 +261,7 @@ export const refreshToken = async (req: Request, res: Response): Promise<void> =
 
 export const logout = async (req: Request, res: Response): Promise<void> => {
     try {
-        const token = req.headers.authorization?.split(' ')[1];
+        const token = req.cookies.accessToken;
 
         if (!token || !req.user?.id) {
             res.status(401).json({
@@ -242,6 +283,9 @@ export const logout = async (req: Request, res: Response): Promise<void> => {
             });
             return;
         }
+
+        res.clearCookie('accessToken', { httpOnly: true, secure: true, sameSite: 'strict' });
+        res.clearCookie('refreshToken', { httpOnly: true, secure: true, sameSite: 'strict' });
 
         res.json({
             status: 'success',
