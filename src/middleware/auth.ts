@@ -25,7 +25,7 @@ export const authenticate = async (
   next: NextFunction
 ): Promise<void> => {
   try {
-    const token = req.headers.authorization?.split(' ')[1];
+    const token = req.cookies.accessToken;
 
     if (!token) {
       res.status(401).json({
