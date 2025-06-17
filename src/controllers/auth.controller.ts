@@ -251,6 +251,16 @@ export const refreshToken = async (req: Request, res: Response): Promise<void> =
         res.json({
             status: 'success',
             message: 'Token refreshed successfully',
+            data: {
+                user: {
+                    id: tokenRecord.user.id,
+                    email: tokenRecord.user.email,
+                    firstName: tokenRecord.user.firstName,
+                    lastName: tokenRecord.user.lastName,
+                    role: tokenRecord.user.role,
+                    isVerified: tokenRecord.user.isVerified,
+                }
+            }
         });
     } catch (error) {
         console.error('Token refresh error:', error);
