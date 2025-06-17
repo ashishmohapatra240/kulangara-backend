@@ -252,8 +252,6 @@ export const refreshToken = async (req: Request, res: Response): Promise<void> =
             status: 'success',
             message: 'Token refreshed successfully',
             data: {
-                accessToken: tokens.accessToken,
-                refreshToken: tokens.refreshToken,
                 user: {
                     id: tokenRecord.user.id,
                     email: tokenRecord.user.email,
