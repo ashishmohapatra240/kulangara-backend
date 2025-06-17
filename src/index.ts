@@ -19,7 +19,13 @@ const port = process.env.PORT || 3000;
 // Middleware
 app.use(morgan('dev'));
 app.use(helmet());
-app.use(cors());
+app.use(cors({
+    origin: [
+        'http://localhost:4200',
+        'https://kulangara.org',
+    ],
+    credentials: true,
+}));
 app.use(express.json());
 app.use(cookieParser());
 app.get('/', (req: Request, res: Response) => {
