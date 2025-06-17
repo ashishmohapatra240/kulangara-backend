@@ -202,6 +202,14 @@ export const refreshToken = async (req: Request, res: Response): Promise<void> =
     try {
         const refreshToken = req.cookies.refreshToken;
 
+        if (!refreshToken) {
+            res.status(401).json({
+                status: 'error',
+                message: 'No refresh token provided',
+            });
+            return;
+        }
+
         // Verify token exists and is valid
         const tokenRecord = await prisma.refreshToken.findUnique({
             where: { token: refreshToken },
