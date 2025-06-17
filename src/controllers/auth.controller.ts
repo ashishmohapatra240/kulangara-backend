@@ -83,15 +83,19 @@ export const register = async (req: Request, res: Response): Promise<void> => {
         res.cookie("accessToken", tokens.accessToken, {
 
             httpOnly: true,
-            secure: isProd,
-            sameSite: isProd ? 'strict' : 'lax',
+            // secure: isProd,
+            // sameSite: isProd ? 'strict' : 'lax',
+            secure: false,
+            sameSite: 'none',
             maxAge: 15 * 60 * 1000,
         });
 
         res.cookie("refreshToken", tokens.refreshToken, {
             httpOnly: true,
-            secure: isProd,
-            sameSite: isProd ? 'strict' : 'lax',
+            // secure: isProd,
+            // sameSite: isProd ? 'strict' : 'lax',
+            secure: false,
+            sameSite: 'none',
             maxAge: 7 * 24 * 60 * 60 * 1000,
         });
 
@@ -163,8 +167,10 @@ export const login = async (req: Request, res: Response): Promise<void> => {
 
         res.cookie("accessToken", tokens.accessToken, {
             httpOnly: true,
-            secure: isProd,
-            sameSite: isProd ? 'strict' : 'lax',
+            // secure: isProd,
+            // sameSite: isProd ? 'strict' : 'lax',
+            secure: false,
+            sameSite: 'none',
             maxAge: 15 * 60 * 1000,
         });
 
@@ -251,8 +257,10 @@ export const refreshToken = async (req: Request, res: Response): Promise<void> =
 
         res.cookie("refreshToken", tokens.refreshToken, {
             httpOnly: true,
-            secure: isProd,
-            sameSite: isProd ? 'strict' : 'lax',
+            // secure: isProd,
+            // sameSite: isProd ? 'strict' : 'lax',
+            secure: false,
+            sameSite: 'none',
             maxAge: 7 * 24 * 60 * 60 * 1000,
         })
 
@@ -304,8 +312,8 @@ export const logout = async (req: Request, res: Response): Promise<void> => {
             return;
         }
 
-        res.clearCookie('accessToken', { httpOnly: true, secure: isProd, sameSite: isProd ? 'strict' : 'lax' });
-        res.clearCookie('refreshToken', { httpOnly: true, secure: isProd, sameSite: isProd ? 'strict' : 'lax' });
+        res.clearCookie('accessToken', { httpOnly: true, secure: false, sameSite: 'none' });
+        res.clearCookie('refreshToken', { httpOnly: true, secure: false, sameSite: 'none' });
 
         res.json({
             status: 'success',
