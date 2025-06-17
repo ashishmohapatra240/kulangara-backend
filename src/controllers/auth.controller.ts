@@ -7,6 +7,8 @@ import { IUserCreate } from '../types/user.types';
 import redis from '../config/redis';
 import { sendVerificationEmail, sendPasswordResetEmail } from '../services/email.service';
 
+const isProd = process.env.NODE_ENV === 'production';
+
 const generateTokens = (userId: string, role: string) => {
     const accessToken = jwt.sign(
         { userId, role },
@@ -81,15 +83,15 @@ export const register = async (req: Request, res: Response): Promise<void> => {
         res.cookie("accessToken", tokens.accessToken, {
 
             httpOnly: true,
-            secure: true,
-            sameSite: "strict",
+            secure: isProd,
+            sameSite: isProd ? 'strict' : 'lax',
             maxAge: 15 * 60 * 1000,
         });
 
         res.cookie("refreshToken", tokens.refreshToken, {
             httpOnly: true,
-            secure: true,
-            sameSite: "strict",
+            secure: isProd,
+            sameSite: isProd ? 'strict' : 'lax',
             maxAge: 7 * 24 * 60 * 60 * 1000,
         });
 
@@ -161,15 +163,15 @@ export const login = async (req: Request, res: Response): Promise<void> => {
 
         res.cookie("accessToken", tokens.accessToken, {
             httpOnly: true,
-            secure: true,
-            sameSite: "strict",
+            secure: isProd,
+            sameSite: isProd ? 'strict' : 'lax',
             maxAge: 15 * 60 * 1000,
         });
 
         res.cookie("refreshToken", tokens.refreshToken, {
             httpOnly: true,
-            secure: true,
-            sameSite: "strict",
+            secure: isProd,
+            sameSite: isProd ? 'strict' : 'lax',
             maxAge: 7 * 24 * 60 * 60 * 1000,
         })
 
@@ -234,15 +236,15 @@ export const refreshToken = async (req: Request, res: Response): Promise<void> =
         res.cookie("accessToken", tokens.accessToken, {
 
             httpOnly: true,
-            secure: true,
-            sameSite: "strict",
+            secure: isProd,
+            sameSite: isProd ? 'strict' : 'lax',
             maxAge: 15 * 60 * 1000,
         });
 
         res.cookie("refreshToken", tokens.refreshToken, {
             httpOnly: true,
-            secure: true,
-            sameSite: "strict",
+            secure: isProd,
+            sameSite: isProd ? 'strict' : 'lax',
             maxAge: 7 * 24 * 60 * 60 * 1000,
         })
 
@@ -284,8 +286,8 @@ export const logout = async (req: Request, res: Response): Promise<void> => {
             return;
         }
 
-        res.clearCookie('accessToken', { httpOnly: true, secure: true, sameSite: 'strict' });
-        res.clearCookie('refreshToken', { httpOnly: true, secure: true, sameSite: 'strict' });
+        res.clearCookie('accessToken', { httpOnly: true, secure: isProd, sameSite: isProd ? 'strict' : 'lax' });
+        res.clearCookie('refreshToken', { httpOnly: true, secure: isProd, sameSite: isProd ? 'strict' : 'lax' });
 
         res.json({
             status: 'success',
