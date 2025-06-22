@@ -409,15 +409,32 @@ export const clearCart = async (req: Request, res: Response): Promise<void> => {
     try {
         const userId = req.user!.id;
 
+        const cart = await prisma.cart.findUnique({
+            where: { userId },
+        });
+
+        if (!cart) {
+            await deleteCache(CACHE_KEYS.CART(userId));
+
+            res.json({
+                status: 'success',
+                message: 'Cart is already empty',
+                data: {
+                    items: [],
+                    subtotal: 0,
+                    total: 0
+                }
+            });
+            return;
+        }
+
         const updatedCart = await prisma.$transaction(async (prismaClient) => {
-            // Delete all cart items
             await prismaClient.cartItem.deleteMany({
                 where: {
-                    cart: { userId }
+                    cartId: cart.id
                 }
             });
 
-            // Reset cart totals
             return await prismaClient.cart.update({
                 where: { userId },
                 data: {
@@ -430,7 +447,6 @@ export const clearCart = async (req: Request, res: Response): Promise<void> => {
             });
         });
 
-        // Invalidate cache
         await deleteCache(CACHE_KEYS.CART(userId));
 
         res.json({
