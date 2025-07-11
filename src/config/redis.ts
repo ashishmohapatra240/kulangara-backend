@@ -6,7 +6,11 @@ if (!redisUrl) {
     throw new Error('REDIS_URL is not defined');
 }
 
-const redis = new Redis(redisUrl);
+const redis = new Redis(redisUrl, {
+    tls: {
+        rejectUnauthorized: false
+    }
+});
 
 redis.on('connect', () => {
     console.log('Connected to Redis');
