@@ -7,9 +7,7 @@ if (!redisUrl) {
 }
 
 const redis = new Redis(redisUrl, {
-    tls: {
-        rejectUnauthorized: false
-    }
+    tls: {}
 });
 
 redis.on('connect', () => {
