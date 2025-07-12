@@ -1,14 +1,11 @@
 import Redis from 'ioredis';
 
-const redisUrl = process.env.REDIS_URL;
-
-if (!redisUrl) {
-    throw new Error('REDIS_URL is not defined');
-}
-
-const redis = redisUrl.startsWith('rediss://')
-    ? new Redis(redisUrl, { tls: {} })
-    : new Redis(redisUrl);
+const redis = new Redis({
+    port: 16529,
+    host: 'redis-16529.c264.ap-south-1-1.ec2.redns.redis-cloud.com',
+    username: 'default',
+    password: process.env.REDIS_PASSWORD || '',
+});
 
 redis.on('connect', () => {
     console.log('Connected to Redis');
