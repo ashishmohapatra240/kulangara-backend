@@ -42,6 +42,97 @@ const isValidObjectId = (id: string): boolean => {
     }
 };
 
+export const listProductsAdmin = async (
+    req: Request<{}, {}, {}, IProductFilters>,
+    res: Response
+): Promise<void> => {
+    try {
+        const {
+            page = 1,
+            limit = 10,
+            category,
+            minPrice,
+            maxPrice,
+            gender,
+            isActive,
+            isFeatured,
+            sortBy = 'createdAt',
+            sortOrder = 'desc'
+        } = req.query;
+
+        const normalizedQuery = {
+            page: Number(page),
+            limit: Number(limit),
+            category: category ? String(category) : undefined,
+            minPrice: minPrice ? Number(minPrice) : undefined,
+            maxPrice: maxPrice ? Number(maxPrice) : undefined,
+            gender: gender ? (String(gender) as Gender) : undefined,
+            isActive: typeof isActive === 'string' ? isActive === 'true' : undefined,
+            isFeatured: typeof isFeatured === 'string' ? isFeatured === 'true' : undefined,
+            sortBy,
+            sortOrder
+        };
+
+        // Create cache key based on query parameters
+        const cacheKey = `products:admin:list:${JSON.stringify(normalizedQuery)}`;
+
+        const result = await cacheWrapper(
+            cacheKey,
+            async () => {
+                const where: Prisma.ProductWhereInput = {
+                    isActive: normalizedQuery.isActive,
+                    isFeatured: normalizedQuery.isFeatured,
+                    categoryId: normalizedQuery.category,
+                    gender: normalizedQuery.gender as Gender,
+                    price: {
+                        gte: normalizedQuery.minPrice,
+                        lte: normalizedQuery.maxPrice
+                    }
+                };
+
+                const [products, total] = await Promise.all([
+                    prisma.product.findMany({
+                        where,
+                        include: {
+                            category: true,
+                            images: true,
+                            variants: true
+                        },
+                        skip: (normalizedQuery.page - 1) * normalizedQuery.limit,
+                        take: normalizedQuery.limit,
+                        orderBy: {
+                            [String(normalizedQuery.sortBy)]: normalizedQuery.sortOrder
+                        }
+                    }),
+                    prisma.product.count({ where })
+                ]);
+
+                return {
+                    data: products,
+                    meta: {
+                        total,
+                        page: Number(page),
+                        limit: Number(limit),
+                        totalPages: Math.ceil(total / Number(limit))
+                    }
+                };
+            },
+            300 // Cache for 5 minutes
+        );
+
+        res.json({
+            status: 'success',
+            data: result
+        });
+    } catch (error) {
+        console.error('Error in listProductsAdmin:', error);
+        res.status(500).json({
+            status: 'error',
+            message: 'Failed to fetch products'
+        });
+    }
+};
+
 // List products with filters
 export const listProducts = async (
     req: Request<{}, {}, {}, IProductFilters>,
@@ -331,6 +422,7 @@ export const createProduct = async (req: Request<{}, {}, IProductCreate>, res: R
         // Invalidate relevant caches
         await Promise.all([
             deleteCachePattern(`${CACHE_KEYS.PRODUCTS_LIST}:*`),
+            deleteCachePattern(`products:admin:list:*`),
             deleteCachePattern(CACHE_KEYS.FEATURED_PRODUCTS)
         ]);
 
@@ -375,6 +467,7 @@ export const updateProduct = async (
         // Invalidate relevant caches
         await Promise.all([
             deleteCachePattern(`${CACHE_KEYS.PRODUCTS_LIST}:*`),
+            deleteCachePattern(`products:admin:list:*`),
             deleteCache(CACHE_KEYS.PRODUCT_DETAILS(id)),
             deleteCache(`products:slug:${product.slug}`),
             product.isFeatured && deleteCachePattern(CACHE_KEYS.FEATURED_PRODUCTS)
@@ -421,6 +514,7 @@ export const deleteProduct = async (req: Request, res: Response): Promise<void> 
         // Invalidate relevant caches
         await Promise.all([
             deleteCachePattern(`${CACHE_KEYS.PRODUCTS_LIST}:*`),
+            deleteCachePattern(`products:admin:list:*`),
             deleteCache(CACHE_KEYS.PRODUCT_DETAILS(id)),
             deleteCachePattern(CACHE_KEYS.FEATURED_PRODUCTS)
         ]);
