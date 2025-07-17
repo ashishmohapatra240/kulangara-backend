@@ -46,18 +46,12 @@ router.get('/:id/reviews', getProductReviews);
 // Protected routes
 router.use(authenticate);
 
-// Review routes (requires authentication)
-router.post('/:id/reviews', validateRequest(createReviewSchema), createProductReview);
-router.put('/:id/reviews/:reviewId', validateRequest(updateReviewSchema), updateProductReview);
-router.delete('/:id/reviews/:reviewId', deleteProductReview);
-
-
 // Admin only routes
 router.get('/admin/list', authorize(Role.ADMIN), listProductsAdmin);
 router.post('/', authorize(Role.ADMIN), validateRequest(createProductSchema), createProduct);
 router.put('/:id', authorize(Role.ADMIN), validateRequest(updateProductSchema), updateProduct);
 
-// Image upload routes
+// Image upload routes (admin only)
 router.post('/:id/images/upload-urls', authorize(Role.ADMIN), getProductImageUploadUrls);
 router.post('/:id/images', authorize(Role.ADMIN), uploadProductImages);
 router.delete('/:id/images/:imageId', authorize(Role.ADMIN), deleteProductImage);
@@ -70,6 +64,11 @@ router.delete('/:id/variants/:variantId', authorize(Role.ADMIN), deleteProductVa
 
 // Super Admin only routes
 router.delete('/:id', authorize(Role.SUPER_ADMIN), deleteProduct);
+
+// User routes (requires authentication)
+router.post('/:id/reviews', validateRequest(createReviewSchema), createProductReview);
+router.put('/:id/reviews/:reviewId', validateRequest(updateReviewSchema), updateProductReview);
+router.delete('/:id/reviews/:reviewId', deleteProductReview);
 
 // Generic ID route should come last
 router.get('/:id', getProductById);
