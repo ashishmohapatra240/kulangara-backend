@@ -563,6 +563,11 @@ export const deleteProductImage = async (req: Request, res: Response): Promise<v
             where: { id: imageId }
         });
 
+        await Promise.all([
+            deleteCache(CACHE_KEYS.PRODUCT_DETAILS(image.productId)),
+            deleteCachePattern(`products:slug:*`)
+        ]);
+
         res.json({
             status: 'success',
             message: 'Product image deleted successfully'
