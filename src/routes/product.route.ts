@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import {
     listProducts,
+    listProductsAdmin,
     getFeaturedProducts,
     searchProducts,
     getProductById,
@@ -52,6 +53,7 @@ router.delete('/:id/reviews/:reviewId', deleteProductReview);
 
 
 // Admin only routes
+router.get('/admin/list', authorize(Role.ADMIN), listProductsAdmin);
 router.post('/', authorize(Role.ADMIN), validateRequest(createProductSchema), createProduct);
 router.put('/:id', authorize(Role.ADMIN), validateRequest(updateProductSchema), updateProduct);
 
