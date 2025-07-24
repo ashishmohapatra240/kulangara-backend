@@ -8,6 +8,7 @@ import wishlistRouter from './wishlist.route';
 import orderRouter from './order.route';
 import adminRouter from './admin.route';
 import couponRouter from './coupon.route';
+import paymentRouter from './payment.route';
 
 const router = Router();
 
@@ -20,5 +21,6 @@ router.use('/cart', cartRouter);
 router.use('/wishlist', wishlistRouter);
 router.use('/orders', orderRouter);
 router.use('/admin', adminRouter);
+router.use('/payments', paymentRouter);
 
 export default router; 
