@@ -37,7 +37,7 @@ export const createRazorpayOrder = async (req: Request, res: Response): Promise<
 
         // Create Razorpay order
         const razorpayOrder = await razorpay.orders.create({
-        amount: Math.round(order.totalAmount), // Convert to smallest currency unit (paise)
+            amount: Math.round(order.totalAmount * 100), // Convert to smallest currency unit (paise)
             currency: 'INR',
             receipt: order.orderNumber,
             notes: {
@@ -156,6 +156,7 @@ export const handleWebhook = async (req: Request, res: Response): Promise<void> 
             .update(req.body)
             .digest('hex');
 
+
         if (expectedSignature !== signature) {
             res.status(400).json({
                 status: 'error',
@@ -164,7 +165,9 @@ export const handleWebhook = async (req: Request, res: Response): Promise<void> 
             return;
         }
 
-        const event = req.body;
+
+        // Parse the event after verification
+        const event = JSON.parse(req.body.toString());
 
         switch (event.event) {
             case 'payment.captured':

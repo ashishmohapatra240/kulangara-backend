@@ -10,6 +10,9 @@ import { createRazorpayOrderSchema, verifyPaymentSchema } from '../validators/pa
 
 const router = Router();
 
+// Webhook (public route)
+router.post('/webhook', handleWebhook);
+
 // Protected routes
 router.use(authenticate);
 
@@ -18,8 +21,5 @@ router.post('/create-order', validateRequest(createRazorpayOrderSchema), createR
 
 // Verify payment
 router.post('/verify', validateRequest(verifyPaymentSchema), verifyPayment);
-
-// Webhook (public route)
-router.post('/webhook', handleWebhook);
 
 export default router;
