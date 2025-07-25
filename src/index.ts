@@ -11,6 +11,7 @@ import cookieParser from 'cookie-parser';
 import redis from './config/redis';
 import indexRoutes from './routes';
 import { errorHandler, notFoundHandler } from './middleware/error';
+import paymentRoutes from './routes/payment.route';
 
 
 const app = express();
@@ -28,6 +29,12 @@ app.use(cors({
 }));
 app.use(express.json());
 app.use(cookieParser());
+
+
+// For webhook, use raw body parser
+app.use('/api/v1/payment/webhook', express.raw({ type: 'application/json' }));
+
+
 app.get('/', (req: Request, res: Response) => {
     res.send('Hello kulangara');
 });
