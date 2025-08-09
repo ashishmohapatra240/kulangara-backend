@@ -42,6 +42,7 @@ router.get('/featured', getFeaturedProducts);
 router.get('/search', searchProducts);
 router.get('/slug/:slug', getProductBySlug);
 router.get('/:id/reviews', getProductReviews);
+router.get('/:id', getProductById);
 
 // Protected routes
 router.use(authenticate);
@@ -69,8 +70,5 @@ router.delete('/:id', authorize(Role.SUPER_ADMIN), deleteProduct);
 router.post('/:id/reviews', validateRequest(createReviewSchema), createProductReview);
 router.put('/:id/reviews/:reviewId', validateRequest(updateReviewSchema), updateProductReview);
 router.delete('/:id/reviews/:reviewId', deleteProductReview);
-
-// Generic ID route should come last
-router.get('/:id', getProductById);
 
 export default router;
