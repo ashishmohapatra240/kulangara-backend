@@ -1,252 +1,627 @@
-import { Request, Response } from 'express';
-import crypto from 'crypto';
-import { prisma } from '../config/db';
-import { PaymentStatus } from '@prisma/client';
-import { razorpay } from '../config/razorpay';
+import { Request, Response } from "express";
+import crypto from "crypto";
+import { prisma } from "../config/db";
+import { PaymentStatus, OrderStatus } from "@prisma/client";
+import { razorpay } from "../config/razorpay";
+import redis from "../config/redis";
+import {
+  ICreateRazorpayOrderRequest,
+  IVerifyPaymentWithCartRequest,
+  ITemporaryOrderData,
+} from "../types/payment.types";
 
-// Create Razorpay order
-export const createRazorpayOrder = async (req: Request, res: Response): Promise<void> => {
-    try {
-        const { orderId } = req.body;
+export const createRazorpayOrder = async (
+  req: Request,
+  res: Response
+): Promise<void> => {
+  try {
+    const { orderId } = req.body;
 
-        // Get order details from database
-        const order = await prisma.order.findUnique({
-            where: { id: orderId },
-            select: {
-                id: true,
-                orderNumber: true,
-                totalAmount: true,
-                user: {
-                    select: {
-                        email: true,
-                        firstName: true,
-                        lastName: true,
-                        phone: true
-                    }
-                }
-            }
-        });
+    // Get order details from database
+    const order = await prisma.order.findUnique({
+      where: { id: orderId },
+      select: {
+        id: true,
+        orderNumber: true,
+        totalAmount: true,
+        user: {
+          select: {
+            email: true,
+            firstName: true,
+            lastName: true,
+            phone: true,
+          },
+        },
+      },
+    });
 
-        if (!order) {
-            res.status(404).json({
-                status: 'error',
-                message: 'Order not found'
-            });
-            return;
-        }
-
-        // Create Razorpay order
-        const razorpayOrder = await razorpay.orders.create({
-            amount: Math.round(order.totalAmount * 100), // Convert to smallest currency unit (paise)
-            currency: 'INR',
-            receipt: order.orderNumber,
-            notes: {
-                orderId: order.id
-            }
-        });
-
-        // Return order details
-        res.json({
-            status: 'success',
-            data: {
-                orderId: razorpayOrder.id,
-                currency: razorpayOrder.currency,
-                amount: razorpayOrder.amount,
-                key: process.env.RAZORPAY_KEY_ID,
-                name: process.env.BUSINESS_NAME || 'Kulangara',
-                description: `Order #${order.orderNumber}`,
-                prefill: {
-                    name: `${order.user.firstName} ${order.user.lastName}`,
-                    email: order.user.email,
-                    contact: order.user.phone
-                }
-            }
-        });
-    } catch (error) {
-        console.error('Error in createRazorpayOrder:', error);
-        res.status(500).json({
-            status: 'error',
-            message: 'Failed to create payment order'
-        });
+    if (!order) {
+      res.status(404).json({
+        status: "error",
+        message: "Order not found",
+      });
+      return;
     }
+
+    const razorpayOrder = await razorpay.orders.create({
+      amount: Math.round(order.totalAmount * 100), // Convert to smallest currency unit (paise)
+      currency: "INR",
+      receipt: order.orderNumber,
+      notes: {
+        orderId: order.id,
+      },
+    });
+
+    res.json({
+      status: "success",
+      data: {
+        orderId: razorpayOrder.id,
+        currency: razorpayOrder.currency,
+        amount: razorpayOrder.amount,
+        key: process.env.RAZORPAY_KEY_ID,
+        name: process.env.BUSINESS_NAME || "Kulangara",
+        description: `Order #${order.orderNumber}`,
+        prefill: {
+          name: `${order.user.firstName} ${order.user.lastName}`,
+          email: order.user.email,
+          contact: order.user.phone,
+        },
+      },
+    });
+  } catch (error) {
+    console.error("Error in createRazorpayOrder:", error);
+    res.status(500).json({
+      status: "error",
+      message: "Failed to create payment order",
+    });
+  }
 };
 
-// Verify payment
-export const verifyPayment = async (req: Request, res: Response): Promise<void> => {
-    try {
-        const {
-            razorpay_order_id,
-            razorpay_payment_id,
-            razorpay_signature
-        } = req.body;
+// Create Razorpay order from cart data (without creating database order)
+export const createRazorpayOrderFromCart = async (
+  req: Request,
+  res: Response
+): Promise<void> => {
+  try {
+    const { cartData, userEmail, userPhone }: ICreateRazorpayOrderRequest =
+      req.body;
+    const userId = req.user!.id;
 
-        // Verify signature
-        const body = razorpay_order_id + '|' + razorpay_payment_id;
-        const expectedSignature = crypto
-            .createHmac('sha256', process.env.RAZORPAY_KEY_SECRET!)
-            .update(body)
-            .digest('hex');
+    // Get user details
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: {
+        email: true,
+        firstName: true,
+        lastName: true,
+        phone: true,
+      },
+    });
 
-        if (expectedSignature !== razorpay_signature) {
-            res.status(400).json({
-                status: 'error',
-                message: 'Invalid payment signature'
-            });
-            return;
-        }
-
-        // Get payment details
-        const payment = await razorpay.payments.fetch(razorpay_payment_id);
-        const orderId = payment.notes?.orderId;
-
-        if (!orderId) {
-            res.status(400).json({
-                status: 'error',
-                message: 'Order ID not found in payment'
-            });
-            return;
-        }
-
-        // Update order status
-        await prisma.order.update({
-            where: { id: orderId },
-            data: {
-                paymentStatus: PaymentStatus.PAID,
-                paymentId: razorpay_payment_id,
-                status: 'CONFIRMED',
-                statusHistory: {
-                    create: {
-                        status: 'CONFIRMED',
-                        note: 'Payment received and verified'
-                    }
-                }
-            }
-        });
-
-        res.json({
-            status: 'success',
-            message: 'Payment verified successfully'
-        });
-    } catch (error) {
-        console.error('Error in verifyPayment:', error);
-        res.status(500).json({
-            status: 'error',
-            message: 'Failed to verify payment'
-        });
+    if (!user) {
+      res.status(404).json({
+        status: "error",
+        message: "User not found",
+      });
+      return;
     }
+
+    const shippingAddress = await prisma.address.findFirst({
+      where: {
+        id: cartData.shippingAddressId,
+        userId: userId,
+      },
+    });
+
+    if (!shippingAddress) {
+      res.status(404).json({
+        status: "error",
+        message: "Shipping address not found",
+      });
+      return;
+    }
+
+    let calculatedSubtotal = 0;
+    for (const item of cartData.items) {
+      if (item.variantId) {
+        const variant = await prisma.productVariant.findUnique({
+          where: { id: item.variantId },
+          include: { product: true },
+        });
+        if (!variant || variant.product.id !== item.productId) {
+          res.status(400).json({
+            status: "error",
+            message: `Invalid product variant: ${item.variantId}`,
+          });
+          return;
+        }
+        if (variant.price !== item.price) {
+          res.status(400).json({
+            status: "error",
+            message: `Price mismatch for variant: ${item.variantId}`,
+          });
+          return;
+        }
+      } else {
+        const product = await prisma.product.findUnique({
+          where: { id: item.productId },
+        });
+        if (!product) {
+          res.status(400).json({
+            status: "error",
+            message: `Product not found: ${item.productId}`,
+          });
+          return;
+        }
+        if (product.price !== item.price) {
+          res.status(400).json({
+            status: "error",
+            message: `Price mismatch for product: ${item.productId}`,
+          });
+          return;
+        }
+      }
+      calculatedSubtotal += item.price * item.quantity;
+    }
+
+    if (Math.abs(calculatedSubtotal - cartData.subtotal) > 0.01) {
+      res.status(400).json({
+        status: "error",
+        message: "Subtotal calculation mismatch",
+      });
+      return;
+    }
+
+    const receiptId = `CART_${Date.now()}_${userId.slice(-6)}`;
+
+    const razorpayOrder = await razorpay.orders.create({
+      amount: Math.round(cartData.total * 100),
+      currency: "INR",
+      receipt: receiptId,
+      notes: {
+        userId: userId,
+        type: "cart_payment",
+        itemCount: cartData.items.length.toString(),
+      },
+    });
+
+    const tempOrderData: ITemporaryOrderData = {
+      razorpayOrderId: razorpayOrder.id,
+      cartData,
+      userId,
+      userEmail: userEmail || user.email,
+      userPhone: userPhone || user.phone || "",
+      createdAt: new Date(),
+      expiresAt: new Date(Date.now() + 60 * 60 * 1000), // 1 hour
+    };
+
+    await redis.setex(
+      `temp_order:${razorpayOrder.id}`,
+      3600,
+      JSON.stringify(tempOrderData)
+    );
+
+    res.json({
+      status: "success",
+      data: {
+        orderId: razorpayOrder.id,
+        amount: razorpayOrder.amount,
+        currency: razorpayOrder.currency,
+        key: process.env.RAZORPAY_KEY_ID,
+        name: process.env.BUSINESS_NAME || "Kulangara",
+        description: `Order for ${cartData.items.length} item(s)`,
+        prefill: {
+          email: userEmail || user.email,
+          contact: userPhone || user.phone || "",
+        },
+        theme: {
+          color: "#3B82F6",
+        },
+      },
+    });
+  } catch (error) {
+    console.error("Error in createRazorpayOrderFromCart:", error);
+    res.status(500).json({
+      status: "error",
+      message: "Failed to create payment order",
+    });
+  }
 };
 
-// Handle Razorpay webhook
-export const handleWebhook = async (req: Request, res: Response): Promise<void> => {
-    try {
-        const webhookSecret = process.env.RAZORPAY_WEBHOOK_SECRET;
-        const signature = req.headers['x-razorpay-signature'];
+export const verifyPayment = async (
+  req: Request,
+  res: Response
+): Promise<void> => {
+  try {
+    const { razorpay_order_id, razorpay_payment_id, razorpay_signature } =
+      req.body;
 
-        if (!webhookSecret || !signature) {
-            res.status(400).json({
-                status: 'error',
-                message: 'Missing webhook secret or signature'
-            });
-            return;
-        }
+    const body = razorpay_order_id + "|" + razorpay_payment_id;
+    const expectedSignature = crypto
+      .createHmac("sha256", process.env.RAZORPAY_KEY_SECRET!)
+      .update(body)
+      .digest("hex");
 
-        // Verify webhook signature
-        const expectedSignature = crypto
-            .createHmac('sha256', webhookSecret)
-            .update(req.body)
-            .digest('hex');
-
-
-        if (expectedSignature !== signature) {
-            res.status(400).json({
-                status: 'error',
-                message: 'Invalid webhook signature'
-            });
-            return;
-        }
-
-
-        // Parse the event after verification
-        const event = JSON.parse(req.body.toString());
-
-        switch (event.event) {
-            case 'payment.captured':
-                await handlePaymentCaptured(event.payload.payment.entity);
-                break;
-            case 'payment.failed':
-                await handlePaymentFailed(event.payload.payment.entity);
-                break;
-            case 'refund.processed':
-                await handleRefundProcessed(event.payload.refund.entity);
-                break;
-        }
-
-        res.json({ status: 'success' });
-    } catch (error) {
-        console.error('Error in handleWebhook:', error);
-        res.status(500).json({
-            status: 'error',
-            message: 'Failed to process webhook'
-        });
+    if (expectedSignature !== razorpay_signature) {
+      res.status(400).json({
+        status: "error",
+        message: "Invalid payment signature",
+      });
+      return;
     }
-};
 
-// Helper functions for webhook handling
-async function handlePaymentCaptured(payment: any) {
+    const payment = await razorpay.payments.fetch(razorpay_payment_id);
     const orderId = payment.notes?.orderId;
-    if (!orderId) return;
+
+    if (!orderId) {
+      res.status(400).json({
+        status: "error",
+        message: "Order ID not found in payment",
+      });
+      return;
+    }
 
     await prisma.order.update({
-        where: { id: orderId },
-        data: {
-            paymentStatus: PaymentStatus.PAID,
-            paymentId: payment.id,
-            status: 'CONFIRMED',
-            statusHistory: {
-                create: {
-                    status: 'CONFIRMED',
-                    note: 'Payment captured successfully'
-                }
-            }
-        }
+      where: { id: orderId },
+      data: {
+        paymentStatus: PaymentStatus.PAID,
+        paymentId: razorpay_payment_id,
+        status: "CONFIRMED",
+        statusHistory: {
+          create: {
+            status: "CONFIRMED",
+            note: "Payment received and verified",
+          },
+        },
+      },
     });
+
+    res.json({
+      status: "success",
+      message: "Payment verified successfully",
+    });
+  } catch (error) {
+    console.error("Error in verifyPayment:", error);
+    res.status(500).json({
+      status: "error",
+      message: "Failed to verify payment",
+    });
+  }
+};
+
+export const verifyPaymentAndCreateOrder = async (
+  req: Request,
+  res: Response
+): Promise<void> => {
+  try {
+    const {
+      razorpay_order_id,
+      razorpay_payment_id,
+      razorpay_signature,
+      cartData,
+    }: IVerifyPaymentWithCartRequest = req.body;
+
+    const userId = req.user!.id;
+
+    const body = razorpay_order_id + "|" + razorpay_payment_id;
+    const expectedSignature = crypto
+      .createHmac("sha256", process.env.RAZORPAY_KEY_SECRET!)
+      .update(body)
+      .digest("hex");
+
+    if (expectedSignature !== razorpay_signature) {
+      res.status(400).json({
+        status: "error",
+        message: "Invalid payment signature",
+      });
+      return;
+    }
+
+    const payment = await razorpay.payments.fetch(razorpay_payment_id);
+
+    if (payment.status !== "captured") {
+      res.status(400).json({
+        status: "error",
+        message: "Payment not captured",
+      });
+      return;
+    }
+
+    const tempOrderDataString = await redis.get(
+      `temp_order:${razorpay_order_id}`
+    );
+    if (!tempOrderDataString) {
+      res.status(400).json({
+        status: "error",
+        message: "Order session expired or not found",
+      });
+      return;
+    }
+
+    const tempOrderData: ITemporaryOrderData = JSON.parse(tempOrderDataString);
+
+    if (tempOrderData.userId !== userId) {
+      res.status(400).json({
+        status: "error",
+        message: "User mismatch",
+      });
+      return;
+    }
+
+    const generateOrderNumber = (): string => {
+      const timestamp = Date.now().toString().slice(-8);
+      const random = Math.floor(Math.random() * 1000)
+        .toString()
+        .padStart(3, "0");
+      return `KGR${timestamp}${random}`;
+    };
+
+    const generateTrackingNumber = (): string => {
+      const chars = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+      let result = "KGR";
+      const randomBytes = require("crypto").randomBytes(10);
+      for (let i = 0; i < 10; i++) {
+        result += chars[randomBytes[i] % chars.length];
+      }
+      return result;
+    };
+
+    const getEstimatedDeliveryDate = (workingDays: number = 5): Date => {
+      const date = new Date();
+      let addedDays = 0;
+
+      while (addedDays < workingDays) {
+        date.setDate(date.getDate() + 1);
+        const day = date.getDay();
+        if (day !== 0 && day !== 6) {
+          addedDays++;
+        }
+      }
+      return date;
+    };
+
+    let discountAmount = tempOrderData.cartData.discount;
+    let appliedCouponId = null;
+
+    if (cartData.couponCode && tempOrderData.cartData.couponCode) {
+      const coupon = await prisma.coupon.findFirst({
+        where: {
+          code: cartData.couponCode,
+          isActive: true,
+          validFrom: { lte: new Date() },
+          validUntil: { gte: new Date() },
+        },
+      });
+
+      if (!coupon) {
+        res.status(400).json({
+          status: "error",
+          message: "Invalid or expired coupon",
+        });
+        return;
+      }
+
+      appliedCouponId = coupon.id;
+    }
+
+    const result = await prisma.$transaction(async (tx) => {
+      const order = await tx.order.create({
+        data: {
+          orderNumber: generateOrderNumber(),
+          userId: userId,
+          status: OrderStatus.CONFIRMED,
+          paymentStatus: PaymentStatus.PAID,
+          paymentMethod: cartData.paymentMethod,
+          paymentId: razorpay_payment_id,
+          shippingAddressId: cartData.shippingAddressId,
+          subtotal: tempOrderData.cartData.subtotal,
+          discountAmount: discountAmount,
+          totalAmount: tempOrderData.cartData.total,
+          couponId: appliedCouponId,
+          trackingNumber: generateTrackingNumber(),
+          estimatedDelivery: getEstimatedDeliveryDate(),
+        },
+      });
+
+      for (const item of cartData.items) {
+        let currentPrice = 0;
+        if (item.variantId) {
+          const variant = await tx.productVariant.findUnique({
+            where: { id: item.variantId },
+          });
+          currentPrice = variant?.price || 0;
+        } else {
+          const product = await tx.product.findUnique({
+            where: { id: item.productId },
+          });
+          currentPrice = product?.price || 0;
+        }
+
+        await tx.orderItem.create({
+          data: {
+            orderId: order.id,
+            productId: item.productId,
+            variantId: item.variantId,
+            quantity: item.quantity,
+            price: currentPrice,
+          },
+        });
+      }
+
+      await tx.orderStatusHistory.create({
+        data: {
+          orderId: order.id,
+          status: OrderStatus.CONFIRMED,
+          note: "Order confirmed after successful payment",
+        },
+      });
+
+      await tx.cartItem.deleteMany({
+        where: {
+          cart: {
+            userId: userId,
+          },
+        },
+      });
+
+      await tx.cart.updateMany({
+        where: { userId: userId },
+        data: {
+          subtotal: 0,
+          total: 0,
+        },
+      });
+
+      if (appliedCouponId) {
+        await tx.coupon.update({
+          where: { id: appliedCouponId },
+          data: {
+            usageCount: { increment: 1 },
+          },
+        });
+      }
+
+      return order;
+    });
+
+    await redis.del(`temp_order:${razorpay_order_id}`);
+
+    res.json({
+      status: "success",
+      message: "Payment verified and order created successfully",
+      data: {
+        verified: true,
+        paymentId: razorpay_payment_id,
+        orderId: result.id,
+      },
+    });
+  } catch (error) {
+    console.error("Error in verifyPaymentAndCreateOrder:", error);
+    res.status(500).json({
+      status: "error",
+      message: "Failed to verify payment and create order",
+    });
+  }
+};
+
+export const handleWebhook = async (
+  req: Request,
+  res: Response
+): Promise<void> => {
+  try {
+    const webhookSecret = process.env.RAZORPAY_WEBHOOK_SECRET;
+    const signature = req.headers["x-razorpay-signature"];
+
+    if (!webhookSecret || !signature) {
+      res.status(400).json({
+        status: "error",
+        message: "Missing webhook secret or signature",
+      });
+      return;
+    }
+
+    const expectedSignature = crypto
+      .createHmac("sha256", webhookSecret)
+      .update(req.body)
+      .digest("hex");
+
+    if (expectedSignature !== signature) {
+      res.status(400).json({
+        status: "error",
+        message: "Invalid webhook signature",
+      });
+      return;
+    }
+
+    const event = JSON.parse(req.body.toString());
+
+    switch (event.event) {
+      case "payment.captured":
+        await handlePaymentCaptured(event.payload.payment.entity);
+        break;
+      case "payment.failed":
+        await handlePaymentFailed(event.payload.payment.entity);
+        break;
+      case "refund.processed":
+        await handleRefundProcessed(event.payload.refund.entity);
+        break;
+    }
+
+    res.json({ status: "success" });
+  } catch (error) {
+    console.error("Error in handleWebhook:", error);
+    res.status(500).json({
+      status: "error",
+      message: "Failed to process webhook",
+    });
+  }
+};
+
+async function handlePaymentCaptured(payment: any) {
+  const orderId = payment.notes?.orderId;
+  if (!orderId) return;
+
+  await prisma.order.update({
+    where: { id: orderId },
+    data: {
+      paymentStatus: PaymentStatus.PAID,
+      paymentId: payment.id,
+      status: "CONFIRMED",
+      statusHistory: {
+        create: {
+          status: "CONFIRMED",
+          note: "Payment captured successfully",
+        },
+      },
+    },
+  });
 }
 
 async function handlePaymentFailed(payment: any) {
-    const orderId = payment.notes?.orderId;
-    if (!orderId) return;
+  const orderId = payment.notes?.orderId;
+  if (!orderId) return;
 
-    await prisma.order.update({
-        where: { id: orderId },
-        data: {
-            paymentStatus: PaymentStatus.FAILED,
-            paymentId: payment.id,
-            status: 'CANCELLED',
-            statusHistory: {
-                create: {
-                    status: 'CANCELLED',
-                    note: 'Payment failed'
-                }
-            }
-        }
-    });
+  await prisma.order.update({
+    where: { id: orderId },
+    data: {
+      paymentStatus: PaymentStatus.FAILED,
+      paymentId: payment.id,
+      status: "CANCELLED",
+      statusHistory: {
+        create: {
+          status: "CANCELLED",
+          note: "Payment failed",
+        },
+      },
+    },
+  });
 }
 
 async function handleRefundProcessed(refund: any) {
-    const orderId = refund.notes?.orderId;
-    if (!orderId) return;
+  const orderId = refund.notes?.orderId;
+  if (!orderId) return;
 
-    await prisma.order.update({
-        where: { id: orderId },
-        data: {
-            paymentStatus: PaymentStatus.REFUNDED,
-            status: 'REFUNDED',
-            statusHistory: {
-                create: {
-                    status: 'REFUNDED',
-                    note: `Refund processed: ${refund.id}`
-                }
-            }
-        }
-    });
+  await prisma.order.update({
+    where: { id: orderId },
+    data: {
+      paymentStatus: PaymentStatus.REFUNDED,
+      status: "REFUNDED",
+      statusHistory: {
+        create: {
+          status: "REFUNDED",
+          note: `Refund processed: ${refund.id}`,
+        },
+      },
+    },
+  });
 }
+
+export const cleanupExpiredTemporaryOrders = async (): Promise<void> => {
+  try {
+    console.log(
+      "Cleanup function called - Redis keys auto-expire after 1 hour"
+    );
+  } catch (error) {
+    console.error("Error cleaning up expired temporary orders:", error);
+  }
+};
