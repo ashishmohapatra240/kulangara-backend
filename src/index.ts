@@ -17,7 +17,6 @@ import paymentRoutes from './routes/payment.route';
 const app = express();
 const port = process.env.PORT || 3000;
 
-// Middleware
 app.use(morgan('dev'));
 app.use(helmet());
 app.use(cors({
@@ -31,8 +30,7 @@ app.use(express.json());
 app.use(cookieParser());
 
 
-// For webhook, use raw body parser
-app.use('/api/v1/payment/webhook', express.raw({ type: 'application/json' }));
+// app.use('/api/v1/payment/webhook', express.raw({ type: 'application/json' }));
 
 
 app.get('/', (req: Request, res: Response) => {
@@ -41,10 +39,8 @@ app.get('/', (req: Request, res: Response) => {
 
 app.use('/api/v1', indexRoutes);
 
-// Handle 404
 app.use(notFoundHandler);
 
-// Error handling middleware
 app.use(errorHandler);
 
 app.listen(port, async () => {
@@ -52,7 +48,6 @@ app.listen(port, async () => {
         await prisma.$connect();
         console.log('Connected to database');
 
-        // Test Redis connection
         await redis.ping();
     } catch (error) {
         console.error('Failed to connect to services:', error);
