@@ -8,9 +8,11 @@ import {
     listAllOrders,
     updateOrderStatus
 } from '../controllers/order.controller';
+import { updatePaymentStatus } from '../controllers/payment.controller';
 import { authenticate, authorize } from '../middleware/auth';
 import { validateRequest } from '../middleware/validate';
 import { createOrderSchema, updateOrderStatusSchema } from '../validators/order.validator';
+import { updatePaymentStatusSchema } from '../validators/payment.validator';
 import { Role } from '@prisma/client';
 
 const router = Router();
@@ -32,6 +34,12 @@ router.put(
     authorize(Role.DELIVERY_PARTNER, Role.ADMIN, Role.SUPER_ADMIN),
     validateRequest(updateOrderStatusSchema),
     updateOrderStatus
+);
+router.put(
+    '/:orderId/payment-status',
+    authorize(Role.ADMIN, Role.SUPER_ADMIN),
+    validateRequest(updatePaymentStatusSchema),
+    updatePaymentStatus
 );
 
 export default router;

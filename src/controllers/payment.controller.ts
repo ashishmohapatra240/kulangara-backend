@@ -643,6 +643,70 @@ async function handleRefundProcessed(refund: any) {
   });
 }
 
+export const updatePaymentStatus = async (
+  req: Request,
+  res: Response
+): Promise<void> => {
+  try {
+    const { orderId } = req.params;
+    const { paymentStatus, note } = req.body;
+
+    // Check if order exists
+    const existingOrder = await prisma.order.findUnique({
+      where: { id: orderId },
+      select: {
+        id: true,
+        paymentStatus: true,
+        status: true,
+      },
+    });
+
+    if (!existingOrder) {
+      res.status(404).json({
+        status: "error",
+        message: "Order not found",
+      });
+      return;
+    }
+
+    // Update payment status
+    const updatedOrder = await prisma.order.update({
+      where: { id: orderId },
+      data: {
+        paymentStatus: paymentStatus,
+        statusHistory: {
+          create: {
+            status: existingOrder.status,
+            note: note || `Payment status updated to ${paymentStatus}`,
+          },
+        },
+      },
+      include: {
+        statusHistory: {
+          orderBy: { createdAt: 'desc' },
+          take: 1,
+        },
+      },
+    });
+
+    res.json({
+      status: "success",
+      message: "Payment status updated successfully",
+      data: {
+        orderId: updatedOrder.id,
+        paymentStatus: updatedOrder.paymentStatus,
+        lastUpdate: updatedOrder.statusHistory[0],
+      },
+    });
+  } catch (error) {
+    console.error("Error in updatePaymentStatus:", error);
+    res.status(500).json({
+      status: "error",
+      message: "Failed to update payment status",
+    });
+  }
+};
+
 export const cleanupExpiredTemporaryOrders = async (): Promise<void> => {
   try {
     console.log(
