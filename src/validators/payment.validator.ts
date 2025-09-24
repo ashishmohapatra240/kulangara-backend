@@ -52,3 +52,10 @@ export const verifyPaymentWithCartSchema = z.object({
         })
     })
 });
+
+export const updatePaymentStatusSchema = z.object({
+    body: z.object({
+        paymentStatus: z.enum(['PENDING', 'PAID', 'FAILED', 'REFUNDED', 'PARTIAL_REFUND']),
+        note: z.string().optional()
+    })
+});
