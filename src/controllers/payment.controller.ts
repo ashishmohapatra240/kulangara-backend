@@ -4,6 +4,7 @@ import { prisma } from "../config/db";
 import { PaymentStatus, OrderStatus } from "@prisma/client";
 import { razorpay } from "../config/razorpay";
 import redis from "../config/redis";
+import { reserveStock, StockItem } from "../services/stock.service";
 import {
   ICreateRazorpayOrderRequest,
   IVerifyPaymentWithCartRequest,
@@ -405,6 +406,20 @@ export const verifyPaymentAndCreateOrder = async (
     }
 
     const result = await prisma.$transaction(async (tx) => {
+      const stockItems: StockItem[] = cartData.items.map((item) => ({
+        productId: item.productId,
+        variantId: item.variantId,
+        quantity: item.quantity,
+      }));
+
+      const stockReservation = await reserveStock(stockItems, tx);
+
+      if (!stockReservation.success) {
+        throw new Error(stockReservation.message || "Failed to reserve stock");
+      }
+
+      const reservedItems = stockReservation.reservedItems!;
+
       const order = await tx.order.create({
         data: {
           orderNumber: generateOrderNumber(),
@@ -423,27 +438,15 @@ export const verifyPaymentAndCreateOrder = async (
         },
       });
 
-      for (const item of cartData.items) {
-        let currentPrice = 0;
-        if (item.variantId) {
-          const variant = await tx.productVariant.findUnique({
-            where: { id: item.variantId },
-          });
-          currentPrice = variant?.price || 0;
-        } else {
-          const product = await tx.product.findUnique({
-            where: { id: item.productId },
-          });
-          currentPrice = product?.price || 0;
-        }
-
+      // Create order items using the reserved items with correct prices
+      for (const item of reservedItems) {
         await tx.orderItem.create({
           data: {
             orderId: order.id,
             productId: item.productId,
             variantId: item.variantId,
             quantity: item.quantity,
-            price: currentPrice,
+            price: item.price,
           },
         });
       }
@@ -497,6 +500,30 @@ export const verifyPaymentAndCreateOrder = async (
     });
   } catch (error) {
     console.error("Error in verifyPaymentAndCreateOrder:", error);
+
+    // Handle stock-related errors with specific messages
+    const errorMessage = error instanceof Error ? error.message : "";
+    if (errorMessage && errorMessage.includes("Stock reservation failed")) {
+      res.status(400).json({
+        status: "error",
+        message: errorMessage,
+      });
+      return;
+    }
+
+    if (
+      errorMessage &&
+      (errorMessage.includes("Insufficient stock") ||
+        errorMessage.includes("not found"))
+    ) {
+      res.status(400).json({
+        status: "error",
+        message:
+          "Some items in your cart are no longer available or out of stock. Please review your cart and try again.",
+      });
+      return;
+    }
+
     res.status(500).json({
       status: "error",
       message: "Failed to verify payment and create order",
