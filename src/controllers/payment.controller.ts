@@ -648,7 +648,7 @@ export const updatePaymentStatus = async (
   res: Response
 ): Promise<void> => {
   try {
-    const { orderId } = req.params;
+    const { id: orderId } = req.params;
     const { paymentStatus, note } = req.body;
 
     // Check if order exists

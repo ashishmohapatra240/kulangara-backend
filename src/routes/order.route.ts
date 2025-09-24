@@ -36,7 +36,7 @@ router.put(
     updateOrderStatus
 );
 router.put(
-    '/:orderId/payment-status',
+    '/admin/:id/payment-status',
     authorize(Role.ADMIN, Role.SUPER_ADMIN),
     validateRequest(updatePaymentStatusSchema),
     updatePaymentStatus
