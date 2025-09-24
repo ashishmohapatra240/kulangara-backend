@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import { prisma } from '../config/db';
 import { Prisma, OrderStatus, PaymentStatus, DiscountType } from '@prisma/client';
 import { cacheWrapper, deleteCachePattern, deleteCache } from '../services/cache.service';
+import { reserveStock, restoreStock, StockItem } from '../services/stock.service';
 import { ObjectId } from 'bson';
 import {
     IOrderCreate,
@@ -249,63 +250,34 @@ export const createOrder = async (
             let subtotal = 0;
             const orderItems = [];
 
-            // Process each item
-            for (const item of items) {
-                const product = await prisma.product.findUnique({
-                    where: { id: item.productId },
-                    include: {
-                        variants: {
-                            where: { id: item.variantId }
-                        }
-                    }
+            const stockItems: StockItem[] = items.map(item => ({
+                productId: item.productId,
+                variantId: item.variantId,
+                quantity: item.quantity
+            }));
+
+            // Reserve stock atomically
+            const stockReservation = await reserveStock(stockItems, prisma);
+            
+            if (!stockReservation.success) {
+                res.status(400).json({
+                    status: 'error',
+                    message: stockReservation.message || 'Failed to reserve stock'
                 });
+                return;
+            }
 
-                if (!product) {
-                    res.status(404).json({
-                        status: 'error',
-                        message: `Product not found: ${item.productId}`
-                    });
-                    return;
-                }
-
-                // Check stock
-                const variant = item.variantId
-                    ? product.variants.find((v) => v.id === item.variantId)
-                    : null;
-                const currentStock = variant ? variant.stock : product.stockQuantity;
-                if (currentStock < item.quantity) {
-                    res.status(400).json({
-                        status: 'error',
-                        message: `Insufficient stock for product: ${product.name}`
-                    });
-                    return;
-                }
-
-                // Calculate item price
-                const price = variant?.price ?? product.price;
-                const itemSubtotal = price * item.quantity;
+            // Calculate totals using reserved items with correct prices
+            for (const reservedItem of stockReservation.reservedItems!) {
+                const itemSubtotal = reservedItem.price * reservedItem.quantity;
                 subtotal += itemSubtotal;
 
-                // Prepare order item
                 orderItems.push({
-                    productId: item.productId,
-                    variantId: item.variantId,
-                    quantity: item.quantity,
-                    price
+                    productId: reservedItem.productId,
+                    variantId: reservedItem.variantId,
+                    quantity: reservedItem.quantity,
+                    price: reservedItem.price
                 });
-
-                // Update stock
-                if (variant) {
-                    await prisma.productVariant.update({
-                        where: { id: variant.id },
-                        data: { stock: variant.stock - item.quantity }
-                    });
-                } else {
-                    await prisma.product.update({
-                        where: { id: product.id },
-                        data: { stockQuantity: product.stockQuantity - item.quantity }
-                    });
-                }
             }
 
             // Calculate discounts
@@ -430,9 +402,10 @@ export const cancelOrder = async (req: Request<{ id: string }>, res: Response): 
             return;
         }
 
-        // Update order status and create history
-        await prisma.$transaction([
-            prisma.order.update({
+        // Update order status and restore stock atomically
+        await prisma.$transaction(async (tx) => {
+            // Update order status
+            await tx.order.update({
                 where: { id },
                 data: {
                     status: OrderStatus.CANCELLED,
@@ -443,27 +416,25 @@ export const cancelOrder = async (req: Request<{ id: string }>, res: Response): 
                         }
                     }
                 }
-            }),
-            // Restore stock
-            ...order.items.map((item) =>
-                item.variantId
-                    ? prisma.productVariant.update({
-                        where: { id: item.variantId },
-                        data: { stock: { increment: item.quantity } }
-                    })
-                    : prisma.product.update({
-                        where: { id: item.productId },
-                        data: { stockQuantity: { increment: item.quantity } }
-                    })
-            ),
+            });
 
-            ...(order.couponId ? [
-                prisma.coupon.update({
+            // Restore stock using our service
+            const stockItems: StockItem[] = order.items.map(item => ({
+                productId: item.productId,
+                variantId: item.variantId || undefined,
+                quantity: item.quantity
+            }));
+
+            await restoreStock(stockItems, tx);
+
+            // Restore coupon usage if applicable
+            if (order.couponId) {
+                await tx.coupon.update({
                     where: { id: order.couponId },
                     data: { usageCount: { decrement: 1 } }
-                })
-            ] : [])
-        ]);
+                });
+            }
+        });
 
         // Invalidate caches
         await Promise.all([
