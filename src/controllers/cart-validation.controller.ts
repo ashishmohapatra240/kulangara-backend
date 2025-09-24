@@ -67,11 +67,17 @@ export const validateCartStock = async (
  * Get real-time stock information for specific products/variants
  */
 export const getStockInfo = async (
-    req: Request<{}, {}, {}, { productIds?: string; variantIds?: string; }>,
+    req: Request<{ productId?: string; }, {}, {}, { productIds?: string; variantIds?: string; }>,
     res: Response
 ): Promise<void> => {
     try {
+        const { productId } = req.params;
         const { productIds, variantIds } = req.query;
+        
+        let finalProductIds = productIds;
+        if (productId) {
+            finalProductIds = productId;
+        }
 
         const stockInfo: any = {
             products: [],
@@ -79,8 +85,8 @@ export const getStockInfo = async (
         };
 
         // Get product stock info
-        if (productIds) {
-            const productIdArray = productIds.split(',').filter(Boolean);
+        if (finalProductIds) {
+            const productIdArray = finalProductIds.split(',').filter(Boolean);
             
             if (productIdArray.length > 0) {
                 const { prisma } = await import('../config/db');
