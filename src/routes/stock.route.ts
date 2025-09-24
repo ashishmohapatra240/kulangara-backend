@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { validateCartStock, getStockInfo } from '../controllers/cart-validation.controller';
+import { validateCartStock, getStockInfo, getProductOrderHistory } from '../controllers/cart-validation.controller';
 import { authenticate } from '../middleware/auth';
 
 const router = Router();
@@ -12,5 +12,8 @@ router.get('/info', getStockInfo);
 
 // Get stock info for a specific product (supports path parameter)
 router.get('/info/:productId', getStockInfo);
+
+// Debug: Get recent order history for a product
+router.get('/debug/orders/:productId', getProductOrderHistory);
 
 export default router;

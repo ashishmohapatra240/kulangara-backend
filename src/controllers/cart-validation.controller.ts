@@ -100,7 +100,17 @@ export const getStockInfo = async (
                         id: true,
                         name: true,
                         stockQuantity: true,
-                        lowStockThreshold: true
+                        lowStockThreshold: true,
+                        variants: {
+                            where: { isActive: true },
+                            select: {
+                                id: true,
+                                size: true,
+                                color: true,
+                                stock: true,
+                                sku: true
+                            }
+                        }
                     }
                 });
             }
@@ -142,6 +152,73 @@ export const getStockInfo = async (
         res.status(500).json({
             status: 'error',
             message: 'Failed to get stock information'
+        });
+    }
+};
+
+/**
+ * Debug endpoint to check recent orders for a product
+ */
+export const getProductOrderHistory = async (
+    req: Request<{ productId: string; }>,
+    res: Response
+): Promise<void> => {
+    try {
+        const { productId } = req.params;
+        const { prisma } = await import('../config/db');
+
+        const recentOrders = await prisma.orderItem.findMany({
+            where: {
+                productId,
+                createdAt: {
+                    gte: new Date(Date.now() - 24 * 60 * 60 * 1000) // Last 24 hours
+                }
+            },
+            include: {
+                order: {
+                    select: {
+                        id: true,
+                        orderNumber: true,
+                        status: true,
+                        createdAt: true,
+                        user: {
+                            select: {
+                                firstName: true,
+                                lastName: true
+                            }
+                        }
+                    }
+                },
+                variant: {
+                    select: {
+                        size: true,
+                        color: true
+                    }
+                }
+            },
+            orderBy: { createdAt: 'desc' }
+        });
+
+        res.json({
+            status: 'success',
+            data: {
+                productId,
+                recentOrders: recentOrders.map(item => ({
+                    orderId: item.order.id,
+                    orderNumber: item.order.orderNumber,
+                    orderStatus: item.order.status,
+                    quantity: item.quantity,
+                    variant: item.variant ? `${item.variant.size} - ${item.variant.color}` : 'No variant',
+                    customerName: `${item.order.user.firstName} ${item.order.user.lastName}`,
+                    orderDate: item.order.createdAt
+                }))
+            }
+        });
+    } catch (error) {
+        console.error('Error getting order history:', error);
+        res.status(500).json({
+            status: 'error',
+            message: 'Failed to get order history'
         });
     }
 };
