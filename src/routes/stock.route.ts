@@ -1,0 +1,13 @@
+import { Router } from 'express';
+import { validateCartStock, getStockInfo } from '../controllers/cart-validation.controller';
+import { authenticate } from '../middleware/auth';
+
+const router = Router();
+
+// Validate cart stock before checkout
+router.post('/validate-cart', authenticate, validateCartStock);
+
+// Get real-time stock information
+router.get('/info', getStockInfo);
+
+export default router;
