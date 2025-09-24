@@ -1,6 +1,6 @@
 import { Request, Response } from 'express';
 import { prisma } from '../config/db';
-import { Prisma, OrderStatus, DiscountType } from '@prisma/client';
+import { Prisma, OrderStatus, PaymentStatus, DiscountType } from '@prisma/client';
 import { cacheWrapper, deleteCachePattern, deleteCache } from '../services/cache.service';
 import { ObjectId } from 'bson';
 import {
@@ -330,6 +330,11 @@ export const createOrder = async (
                 }
             }
 
+            const isCOD = paymentMethod.toUpperCase() === 'COD' || paymentMethod.toUpperCase() === 'CASH_ON_DELIVERY';
+            const orderStatus = isCOD ? OrderStatus.CONFIRMED : OrderStatus.PENDING;
+            const paymentStatus = isCOD ? PaymentStatus.PENDING : PaymentStatus.PENDING; // COD payment is collected on delivery
+            const statusNote = isCOD ? 'Order confirmed - Cash on Delivery' : 'Order created';
+
             // Create order
             const order = await prisma.order.create({
                 data: {
@@ -337,6 +342,8 @@ export const createOrder = async (
                     orderNumber: new ObjectId().toHexString(),
                     shippingAddressId,
                     paymentMethod,
+                    status: orderStatus,
+                    paymentStatus: paymentStatus,
                     subtotal,
                     discountAmount,
                     totalAmount: subtotal - discountAmount,
@@ -350,8 +357,8 @@ export const createOrder = async (
                     },
                     statusHistory: {
                         create: {
-                            status: OrderStatus.PENDING,
-                            note: 'Order created'
+                            status: orderStatus,
+                            note: statusNote
                         }
                     }
                 },
