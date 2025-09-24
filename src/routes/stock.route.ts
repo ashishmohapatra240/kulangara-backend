@@ -10,4 +10,7 @@ router.post('/validate-cart', authenticate, validateCartStock);
 // Get real-time stock information
 router.get('/info', getStockInfo);
 
+// Get stock info for a specific product (supports path parameter)
+router.get('/info/:productId', getStockInfo);
+
 export default router;
