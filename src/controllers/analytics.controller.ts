@@ -11,7 +11,7 @@ const CACHE_KEYS = {
     ORDER_ANALYTICS: 'orders:analytics'
 };
 
-// Get analytics data
+// Get user analytics data
 export const getAnalytics = async (
     req: Request<{}, {}, {}, IAnalyticsFilters>,
     res: Response
@@ -19,69 +19,155 @@ export const getAnalytics = async (
     try {
         const {
             startDate,
-            endDate,
-            type,
-            event,
-            userId,
-            page = 1,
-            limit = 50
+            endDate
         } = req.query;
 
-        const normalizedQuery = {
-            startDate: startDate ? new Date(startDate) : undefined,
-            endDate: endDate ? new Date(endDate) : undefined,
-            type,
-            event,
-            userId,
-            page: Number(page),
-            limit: Number(limit)
-        };
+        // Parse date parameters
+        const startDateTime = startDate ? new Date(startDate) : new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+        const endDateTime = endDate ? new Date(endDate) : new Date();
+        
+        // Calculate previous period for growth comparison
+        const periodDuration = endDateTime.getTime() - startDateTime.getTime();
+        const previousPeriodStart = new Date(startDateTime.getTime() - periodDuration);
+        const previousPeriodEnd = new Date(startDateTime.getTime());
 
         const result = await cacheWrapper(
-            CACHE_KEYS.ANALYTICS(normalizedQuery),
+            `${CACHE_KEYS.ANALYTICS({ startDate, endDate })}`,
             async () => {
-                const where = {
-                    createdAt: {
-                        gte: normalizedQuery.startDate,
-                        lte: normalizedQuery.endDate
-                    },
-                    type: normalizedQuery.type,
-                    event: normalizedQuery.event,
-                    userId: normalizedQuery.userId
-                };
-
-                const [analytics, total] = await Promise.all([
-                    prisma.analytics.findMany({
-                        where,
-                        orderBy: { createdAt: 'desc' },
-                        skip: (normalizedQuery.page - 1) * normalizedQuery.limit,
-                        take: normalizedQuery.limit
+                const [
+                    totalUsers,
+                    newUsersInPeriod,
+                    activeUsersInPeriod,
+                    usersByRole,
+                    usersByStatus,
+                    dailyRegistrations,
+                    previousPeriodRegistrations
+                ] = await Promise.all([
+                    // Total users registered in date range
+                    prisma.user.count({
+                        where: {
+                            createdAt: {
+                                gte: startDateTime,
+                                lte: endDateTime
+                            }
+                        }
                     }),
-                    prisma.analytics.count({ where })
+
+                    // New users in the specified period
+                    prisma.user.count({
+                        where: {
+                            createdAt: {
+                                gte: startDateTime,
+                                lte: endDateTime
+                            }
+                        }
+                    }),
+
+                    // Active users in the period (users who have logged in during the period)
+                    prisma.user.count({
+                        where: {
+                            lastLoginAt: {
+                                gte: startDateTime,
+                                lte: endDateTime
+                            }
+                        }
+                    }),
+
+                    // Users by role in the period
+                    prisma.user.groupBy({
+                        by: ['role'],
+                        where: {
+                            createdAt: {
+                                gte: startDateTime,
+                                lte: endDateTime
+                            }
+                        },
+                        _count: true
+                    }),
+
+                    // Users by status in the period
+                    prisma.user.groupBy({
+                        by: ['isActive'],
+                        where: {
+                            createdAt: {
+                                gte: startDateTime,
+                                lte: endDateTime
+                            }
+                        },
+                        _count: true
+                    }),
+
+                    // Daily registrations
+                    prisma.user.groupBy({
+                        by: ['createdAt'],
+                        where: {
+                            createdAt: {
+                                gte: startDateTime,
+                                lte: endDateTime
+                            }
+                        },
+                        _count: true
+                    }),
+
+                    // Previous period registrations for growth comparison
+                    prisma.user.count({
+                        where: {
+                            createdAt: {
+                                gte: previousPeriodStart,
+                                lt: previousPeriodEnd
+                            }
+                        }
+                    })
                 ]);
 
-                return {
-                    data: analytics,
-                    meta: {
-                        total,
-                        page: normalizedQuery.page,
-                        limit: normalizedQuery.limit,
-                        totalPages: Math.ceil(total / normalizedQuery.limit)
+                // Calculate growth rate
+                const userGrowth = previousPeriodRegistrations > 0 
+                    ? ((newUsersInPeriod - previousPeriodRegistrations) / previousPeriodRegistrations) * 100 
+                    : 0;
+
+                // Format daily registrations
+                const dailyRegistrationData = dailyRegistrations.map(day => ({
+                    date: day.createdAt,
+                    registrations: day._count
+                }));
+
+                const analytics = {
+                    totalUsers: newUsersInPeriod,
+                    activeUsers: activeUsersInPeriod,
+                    usersByRole: usersByRole.map(item => ({
+                        role: item.role,
+                        count: item._count
+                    })),
+                    usersByStatus: usersByStatus.map(item => ({
+                        status: item.isActive ? 'ACTIVE' : 'INACTIVE',
+                        count: item._count
+                    })),
+                    dailyRegistrations: dailyRegistrationData,
+                    growthAnalytics: {
+                        userGrowth,
+                        previousPeriodUsers: previousPeriodRegistrations,
+                        currentPeriodUsers: newUsersInPeriod
+                    },
+                    period: {
+                        startDate: startDateTime,
+                        endDate: endDateTime
                     }
                 };
+
+                return analytics;
             },
             60 // Cache for 1 minute
         );
 
         res.json({
             status: 'success',
-            ...result
+            data: result
         });
     } catch (error) {
         console.error('Error in getAnalytics:', error);
         res.status(500).json({
             status: 'error',
-            message: 'Failed to fetch analytics data'
+            message: 'Failed to fetch user analytics data'
         });
     }
 };
@@ -213,7 +299,7 @@ export const getDashboardStats = async (
 
                 return stats;
             },
-            300 // Cache for 5 minutes
+            300
         );
 
         res.json({
@@ -229,18 +315,23 @@ export const getDashboardStats = async (
     }
 };
 
-// Get order analytics
 export const getOrderAnalytics = async (
     req: Request,
     res: Response
 ): Promise<void> => {
     try {
+        const { startDate } = req.query;
+        
+        const startDateTime = startDate ? new Date(startDate as string) : new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+        const endDateTime = new Date(); // Always end at current time
+        
+        const periodDuration = endDateTime.getTime() - startDateTime.getTime();
+        const previousPeriodStart = new Date(startDateTime.getTime() - periodDuration);
+        const previousPeriodEnd = new Date(startDateTime.getTime());
+
         const result = await cacheWrapper(
-            CACHE_KEYS.ORDER_ANALYTICS,
+            `${CACHE_KEYS.ORDER_ANALYTICS}:${startDate || 'default'}`,
             async () => {
-                const today = new Date();
-                const thirtyDaysAgo = new Date(today.setDate(today.getDate() - 30));
-                const previousThirtyDaysAgo = new Date(today.setDate(today.getDate() - 30));
 
                 const [
                     totalOrders,
@@ -257,44 +348,65 @@ export const getOrderAnalytics = async (
                     locationStats,
                     deliveryStats
                 ] = await Promise.all([
-                    // Total orders
-                    prisma.order.count(),
+                    prisma.order.count({
+                        where: {
+                            createdAt: {
+                                gte: startDateTime,
+                                lte: endDateTime
+                            }
+                        }
+                    }),
 
-                    // Total revenue
                     prisma.order.aggregate({
+                        where: {
+                            createdAt: {
+                                gte: startDateTime,
+                                lte: endDateTime
+                            }
+                        },
                         _sum: { totalAmount: true }
                     }),
 
-                    // Average order value
                     prisma.order.aggregate({
+                        where: {
+                            createdAt: {
+                                gte: startDateTime,
+                                lte: endDateTime
+                            }
+                        },
                         _avg: { totalAmount: true }
                     }),
-
-                    // Status distribution
+                    
                     prisma.order.groupBy({
                         by: ['status'],
+                        where: {
+                            createdAt: {
+                                gte: startDateTime,
+                                lte: endDateTime
+                            }
+                        },
                         _count: true
                     }),
 
-                    // Daily orders for last 30 days
                     prisma.order.groupBy({
                         by: ['createdAt'],
                         where: {
                             createdAt: {
-                                gte: thirtyDaysAgo
+                                gte: startDateTime,
+                                lte: endDateTime
                             }
                         },
                         _count: true,
                         _sum: { totalAmount: true }
                     }),
 
-                    // Top selling products
                     prisma.orderItem.groupBy({
                         by: ['productId'],
                         where: {
                             order: {
                                 createdAt: {
-                                    gte: thirtyDaysAgo
+                                    gte: startDateTime,
+                                    lte: endDateTime
                                 }
                             }
                         },
@@ -310,12 +422,12 @@ export const getOrderAnalytics = async (
                         take: 10
                     }),
 
-                    // Payment method distribution
                     prisma.order.groupBy({
                         by: ['paymentMethod'],
                         where: {
                             createdAt: {
-                                gte: thirtyDaysAgo
+                                gte: startDateTime,
+                                lte: endDateTime
                             }
                         },
                         _count: true,
@@ -324,12 +436,12 @@ export const getOrderAnalytics = async (
                         }
                     }),
 
-                    // Customer statistics
                     prisma.order.groupBy({
                         by: ['userId'],
                         where: {
                             createdAt: {
-                                gte: thirtyDaysAgo
+                                gte: startDateTime,
+                                lte: endDateTime
                             }
                         },
                         _count: true,
@@ -338,22 +450,22 @@ export const getOrderAnalytics = async (
                         }
                     }),
 
-                    // Hourly order distribution
                     prisma.order.groupBy({
                         by: ['createdAt'],
                         where: {
                             createdAt: {
-                                gte: thirtyDaysAgo
+                                gte: startDateTime,
+                                lte: endDateTime
                             }
                         },
                         _count: true
                     }),
 
-                    // Coupon usage statistics
                     prisma.order.findMany({
                         where: {
                             createdAt: {
-                                gte: thirtyDaysAgo
+                                gte: startDateTime,
+                                lte: endDateTime
                             },
                             NOT: {
                                 couponId: null
@@ -366,12 +478,11 @@ export const getOrderAnalytics = async (
                         }
                     }),
 
-                    // Previous period statistics
                     prisma.order.aggregate({
                         where: {
                             createdAt: {
-                                gte: previousThirtyDaysAgo,
-                                lt: thirtyDaysAgo
+                                gte: previousPeriodStart,
+                                lt: previousPeriodEnd
                             }
                         },
                         _count: true,
@@ -380,12 +491,12 @@ export const getOrderAnalytics = async (
                         }
                     }),
 
-                    // Location statistics
                     prisma.order.groupBy({
                         by: ['shippingAddressId'],
                         where: {
                             createdAt: {
-                                gte: thirtyDaysAgo
+                                gte: startDateTime,
+                                lte: endDateTime
                             }
                         },
                         _count: true,
@@ -394,11 +505,11 @@ export const getOrderAnalytics = async (
                         }
                     }),
 
-                    // Delivery time statistics
                     prisma.order.findMany({
                         where: {
                             createdAt: {
-                                gte: thirtyDaysAgo
+                                gte: startDateTime,
+                                lte: endDateTime
                             },
                             status: OrderStatus.DELIVERED,
                             deliveredAt: {
@@ -413,7 +524,6 @@ export const getOrderAnalytics = async (
                     })
                 ]);
 
-                // Get product details for top products
                 const topProductDetails = await prisma.product.findMany({
                     where: {
                         id: {
@@ -428,7 +538,6 @@ export const getOrderAnalytics = async (
                     }
                 });
 
-                // Get address details for location analytics
                 const addressIds = locationStats.map(stat => stat.shippingAddressId);
                 const addresses = await prisma.address.findMany({
                     where: {
@@ -438,7 +547,6 @@ export const getOrderAnalytics = async (
                     }
                 });
 
-                // Process location statistics
                 const stateStats = new Map();
                 const cityStats = new Map();
                 const pincodeStats = new Map();
@@ -447,14 +555,12 @@ export const getOrderAnalytics = async (
                     const address = addresses.find(a => a.id === stat.shippingAddressId);
                     if (!address) return;
 
-                    // State stats
                     const stateKey = address.state;
                     const stateData = stateStats.get(stateKey) || { orders: 0, revenue: 0 };
                     stateData.orders += stat._count;
                     stateData.revenue += stat._sum.totalAmount || 0;
                     stateStats.set(stateKey, stateData);
 
-                    // City stats
                     const cityKey = `${address.city}-${address.state}`;
                     const cityData = cityStats.get(cityKey) || { 
                         city: address.city,
@@ -466,7 +572,6 @@ export const getOrderAnalytics = async (
                     cityData.revenue += stat._sum.totalAmount || 0;
                     cityStats.set(cityKey, cityData);
 
-                    // Pincode stats
                     const pincodeKey = address.pincode;
                     const pincodeData = pincodeStats.get(pincodeKey) || {
                         pincode: address.pincode,
@@ -479,7 +584,6 @@ export const getOrderAnalytics = async (
                     pincodeStats.set(pincodeKey, pincodeData);
                 });
 
-                // Calculate average delivery times
                 deliveryStats.forEach(order => {
                     const address = addresses.find(a => a.id === order.shippingAddressId);
                     if (!address || !order.deliveredAt) return;
@@ -491,29 +595,25 @@ export const getOrderAnalytics = async (
                     }
                 });
 
-                // Calculate average delivery times for each pincode
                 pincodeStats.forEach(data => {
                     if (data.deliveryTimes.length > 0) {
                         const avgTime = data.deliveryTimes.reduce((a: number, b: number) => a + b, 0) / data.deliveryTimes.length;
-                        data.averageDeliveryTime = Math.round(avgTime / (1000 * 60 * 60 * 24)); // Convert to days
+                        data.averageDeliveryTime = Math.round(avgTime / (1000 * 60 * 60 * 24));
                     }
                     delete data.deliveryTimes;
                 });
 
-                // Process hourly distribution
                 const hourlyOrderCounts = new Array(24).fill(0);
                 hourlyDistribution.forEach(order => {
                     const hour = new Date(order.createdAt).getHours();
                     hourlyOrderCounts[hour] += order._count;
                 });
 
-                // Calculate customer metrics
                 const totalCustomers = customerStats.length;
                 const repeatCustomers = customerStats.filter(c => c._count > 1).length;
                 const averageOrdersPerCustomer = customerStats.reduce((acc, curr) => acc + curr._count, 0) / totalCustomers;
                 const customerLifetimeValue = customerStats.reduce((acc, curr) => acc + (curr._sum.totalAmount || 0), 0) / totalCustomers;
 
-                // Calculate period over period growth
                 const currentPeriodRevenue = totalRevenue._sum.totalAmount || 0;
                 const previousPeriodRevenue = previousPeriodStats._sum.totalAmount || 0;
                 const revenueGrowth = ((currentPeriodRevenue - previousPeriodRevenue) / previousPeriodRevenue) * 100;
@@ -583,7 +683,7 @@ export const getOrderAnalytics = async (
 
                 return analytics;
             },
-            300 // Cache for 5 minutes
+            300
         );
 
         res.json({
